@@ -3,12 +3,8 @@
 using namespace dji_osdk_ros;
 
 anbo_class::anbo_class()    {
-    bool flag = true
     getParam();
     setup();
-    while(flag)    {
-        flag = menu();
-    }
 }
 
 anbo_class::~anbo_class()   {
@@ -53,6 +49,7 @@ void anbo_class::menu() {
 }
 
 void anbo_class::setup()    {
+    menu_flag = true;
     task_control_client = nh.serviceClient<FlightTaskControl>("/flight_task_control");
     // auto set_go_home_altitude_client = nh.serviceClient<SetGoHomeAltitude>("/set_go_home_altitude");
     // auto get_go_home_altitude_client = nh.serviceClient<GetGoHomeAltitude>("get_go_home_altitude");
@@ -64,6 +61,10 @@ void anbo_class::setup()    {
     emergency_brake_client       = nh.serviceClient<dji_osdk_ros::EmergencyBrake>("emergency_brake");
     set_joystick_mode_client = nh.serviceClient<SetJoystickMode>("set_joystick_mode");
     joystick_action_client   = nh.serviceClient<JoystickAction>("joystick_action");
+
+    quaternionSub = nh.subscribe("dji_osdk_ros/attitude", 10, &quaternionCallback);
+    localPositionSub = nh.subscribe("dji_osdk_ros/local_position", 10, &localPositionCallback);
+    rcDataSub = nh.subscribe("dji_osdk_ros/rc", 10, &rcDataCallback);
   
     obtainCtrlAuthority.request.enable_obtain = true;
     obtain_ctrl_authority_client.call(obtainCtrlAuthority);
@@ -153,7 +154,7 @@ bool anbo_class::call_position_control()    {
         return false;
     }
 
-    for (int i = 0; i < p_waypoints_in.size(); i++) {
+    for (int i = 0; i < p_waypoints_in.size()/4; i++) {
         int j = i * 4;
         JoystickCommand wp;
         wp.x = p_waypoints_in[j];
@@ -192,7 +193,7 @@ bool anbo_class::call_velocity_control()    {
         return false;
     }
 
-    for (int i = 0; i < p_velo_in.size(); i++) {
+    for (int i = 0; i < p_velo_in.size()/5; i++) {
         int j = i * 5;
         JoystickCommand v_cmd;
         int take_time_ms;
@@ -268,6 +269,11 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "anbo_node");
     anbo_class anbo_object_();
 
-    ros::spin();
+    while(anbo_object_.menu_flag)   {
+        anbo_object_.menu_flag = anbo_object_.menu();
+        ros::AsyncSpinner spinner(4); // Use 8 threads -> 3 callbacks + 2 Timer callbacks + 1 spare threads for publishers
+        spinner.start();
+        ros::waitForShutdown();
+    }
     return 0;
 }

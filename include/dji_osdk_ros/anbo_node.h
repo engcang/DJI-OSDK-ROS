@@ -31,6 +31,9 @@ namespace dji_osdk_ros  {
         private:
             //// ROS
             ros::NodeHandle nh;
+            ros::Subscriber quaternionSub;
+            ros::Subscriber localPositionSub;
+            ros::Subscriber rcDataSub;
 
             //// Service Client
             ros::ServiceClient task_control_client;
@@ -64,7 +67,7 @@ namespace dji_osdk_ros  {
             void localPositionCallback(const geometry_msgs::PointStamped::ConstPtr& local_pos_in);
             void rcDataCallback(const sensor_msgs::Joy::ConstPtr& rc_data_in);
 
-            void menu();
+            bool menu();
             void setup();
             void getParam();
 
