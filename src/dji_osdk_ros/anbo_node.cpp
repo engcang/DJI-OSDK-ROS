@@ -43,7 +43,7 @@ void anbo_class::menu() {
         }
         case state_Quit: {
             std::cout << "Quit now ..." << std::endl;
-            return 0;
+            return;
         }
         default:
             break;
@@ -231,9 +231,9 @@ bool anbo_class::test_takeoff_landing() {
     if(call_takeoff(2.0))   {
         if(call_landing())  {
             ROS_INFO_STREAM("Return to Menu");
-            return true;
         }
     }
+    return true;
 }
 
 bool anbo_class::test_position_control() {
@@ -242,10 +242,10 @@ bool anbo_class::test_position_control() {
         if(call_position_control())  {
             if(call_landing())  {
                 ROS_INFO_STREAM("Return to Menu");
-                return true;   
             }
         }
     }
+    return true;
 }
 
 bool anbo_class::test_velocity_control() {
@@ -254,10 +254,10 @@ bool anbo_class::test_velocity_control() {
         if(call_velocity_control())  {
             if(call_landing())  {
                 ROS_INFO_STREAM("Return to Menu");
-                return true;   
             }
         }
     }
+    return true;
 }
 
 //// Main

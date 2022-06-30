@@ -1,7 +1,7 @@
 <launch>
   <arg name="node_name" default="anbo_node"/>
 
-    <node pkg="dji_osdk_ros" name="$(arg node_name)" output="screen">
+    <node pkg="dji_osdk_ros" name="$(arg node_name)" type="anbo_node" output="screen">
     <!-- node parameters -->
 
     <!-- position control -->
