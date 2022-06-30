@@ -3,10 +3,11 @@
 using namespace dji_osdk_ros;
 
 anbo_class::anbo_class()    {
+    bool flag = true
     getParam();
     setup();
-    while(1)    {
-        menu();
+    while(flag)    {
+        flag = menu();
     }
 }
 
@@ -43,11 +44,12 @@ void anbo_class::menu() {
         }
         case state_Quit: {
             std::cout << "Quit now ..." << std::endl;
-            return;
+            return false;
         }
         default:
             break;
     }
+    return true;
 }
 
 void anbo_class::setup()    {
