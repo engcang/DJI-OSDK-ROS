@@ -1649,7 +1649,7 @@ static T_OsdkOsalHandler osalHandler = {
       FlightController::HorizontalLogic::HORIZONTAL_POSITION,
       FlightController::VerticalLogic::VERTICAL_POSITION,
       FlightController::YawLogic::YAW_ANGLE,
-      FlightController::HorizontalCoordinate::HORIZONTAL_GROUND,
+      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
       FlightController::StableMode::STABLE_ENABLE,
     };
     vehicle->flightController->setJoystickMode(joystickMode);
@@ -1736,7 +1736,7 @@ static T_OsdkOsalHandler osalHandler = {
       FlightController::HorizontalLogic::HORIZONTAL_VELOCITY,
       FlightController::VerticalLogic::VERTICAL_VELOCITY,
       FlightController::YawLogic::YAW_RATE,
-      FlightController::HorizontalCoordinate::HORIZONTAL_GROUND,
+      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
       FlightController::StableMode::STABLE_ENABLE,
     };
 
