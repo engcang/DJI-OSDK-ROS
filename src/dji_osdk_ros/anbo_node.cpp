@@ -110,7 +110,6 @@ void anbo_class::rcDataCallback(const sensor_msgs::Joy::ConstPtr& rc_data_in)   
 bool anbo_class::call_emergency_brake(float sleep_time) {
     ROS_INFO("EmergencyBrake for %fs", sleep_time);
     emergency_brake_client.call(emergency_brake);
-    ros::Duration(sleep_time).sleep();
     if(emergency_brake.response.result == true)    {
         ROS_INFO_STREAM("EmergencyBrake successful");
         ros::Duration(sleep_time).sleep();
@@ -124,8 +123,7 @@ bool anbo_class::call_emergency_brake(float sleep_time) {
 bool anbo_class::call_takeoff(float sleep_time) {
     control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
     ROS_INFO_STREAM("Takeoff request sending ...");
-    task_control_client.call(control_task);
-    if(control_task.response.result == true)    {
+    if (task_control_client.call(control_task)) {
         ROS_INFO_STREAM("Takeoff task successful");
         ros::Duration(sleep_time).sleep();
     }
@@ -138,8 +136,7 @@ bool anbo_class::call_takeoff(float sleep_time) {
 bool anbo_class::call_landing() {
     control_task.request.task = FlightTaskControl::Request::TASK_LAND;
     ROS_INFO_STREAM("Landing request sending ...");
-    task_control_client.call(control_task);
-    if(control_task.response.result == true)    {
+    if(task_control_client.call(control_task))  {
         ROS_INFO_STREAM("Landing task successful");
     }
     else{
@@ -172,8 +169,7 @@ bool anbo_class::call_position_control()    {
         control_task.request.posThresholdInM   = p_th_pos;
         control_task.request.yawThresholdInDeg = p_th_yaw;
 
-        task_control_client.call(control_task);
-        if(control_task.response.result)    {
+        if(task_control_client.call(control_task))  {
             ROS_INFO("%d sequence success!!", i);
             ros::Duration(1.0).sleep();
             continue;
@@ -212,8 +208,7 @@ bool anbo_class::call_velocity_control()    {
         control_task.request.joystickCommand.yaw = v_cmd.yaw;  // max: 150 [deg/s]
         control_task.request.velocityControlTimeMs   = take_time_ms;
 
-        task_control_client.call(control_task);
-        if(control_task.response.result)    {
+        if(task_control_client.call(control_task))  {
             ROS_INFO("%d sequence success!!", i);
             ros::Duration(1.0).sleep();
             continue;
