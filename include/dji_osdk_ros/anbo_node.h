@@ -17,6 +17,7 @@
 #include <geometry_msgs/QuaternionStamped.h>
 #include <geometry_msgs/PointStamped.h>
 #include <sensor_msgs/Joy.h>
+#include <std_msgs/String.h>
 
 #define state_Takeoff_Landing 'a'
 #define state_Position_Control 'b'
@@ -27,6 +28,7 @@ class anbo_class    {
     public:
         anbo_class();
         ~anbo_class();
+        bool menu();
 
     private:
         //// ROS
@@ -34,6 +36,7 @@ class anbo_class    {
         ros::Subscriber quaternionSub;
         ros::Subscriber localPositionSub;
         ros::Subscriber rcDataSub;
+        ros::Subscriber missionStringSub;
 
         //// Service Client
         ros::ServiceClient task_control_client;
@@ -49,11 +52,14 @@ class anbo_class    {
         dji_osdk_ros::SetJoystickMode joystickMode;
         dji_osdk_ros::JoystickAction joystickAction;
 
+        ///// Jonna important Control Authority haha
+        bool control_authority_check=false;
+
         //// Parameters
         // position control
         std::vector<double> p_waypoints_in;
-        float p_th_pos;
-        float p_th_yaw;
+        double p_th_pos;
+        double p_th_yaw;
         // velocity control
         std::vector<double> p_velo_in;
 
@@ -66,11 +72,11 @@ class anbo_class    {
         void quaternionCallback(const geometry_msgs::QuaternionStampedConstPtr& q_in);
         void localPositionCallback(const geometry_msgs::PointStamped::ConstPtr& local_pos_in);
         void rcDataCallback(const sensor_msgs::Joy::ConstPtr& rc_data_in);
+        void missionDataCallback(const std_msgs::String::ConstPtr &string_msg);
 
         
         void setup();
         void getParam();
-        bool menu();
 
         bool call_emergency_brake(float sleep_time);
         bool call_takeoff(float sleep_time);

@@ -5,7 +5,6 @@ using namespace dji_osdk_ros;
 anbo_class::anbo_class()    {
     getParam();
     setup();
-    menu();
 }
 
 anbo_class::~anbo_class()   {
@@ -65,6 +64,7 @@ void anbo_class::setup()    {
     quaternionSub = nh.subscribe("dji_osdk_ros/attitude", 10, &anbo_class::quaternionCallback, this);
     localPositionSub = nh.subscribe("dji_osdk_ros/local_position", 10, &anbo_class::localPositionCallback, this);
     rcDataSub = nh.subscribe("dji_osdk_ros/rc", 10, &anbo_class::rcDataCallback, this);
+    missionStringSub = nh.subscribe("/mission_flag", 10, &anbo_class::missionDataCallback, this);
   
     obtainCtrlAuthority.request.enable_obtain = true;
     obtain_ctrl_authority_client.call(obtainCtrlAuthority);
@@ -72,12 +72,12 @@ void anbo_class::setup()    {
 
 void anbo_class::getParam() {
     // position control
-    nh.param("/waypoints", p_waypoints_in); // x, y, z, yaw
-    nh.param("/pos_Threshold", p_th_pos);
-    nh.param("/yaw_Threshold", p_th_yaw);
+    nh.getParam("/waypoints", p_waypoints_in); // x, y, z, yaw
+    nh.getParam("/pos_Threshold", p_th_pos);
+    nh.getParam("/yaw_Threshold", p_th_yaw);
 
     // velocity control
-    nh.param("/velocity_cmd", p_velo_in);   // x, y, z, yaw, time
+    nh.getParam("/velocity_cmd", p_velo_in);   // x, y, z, yaw, time
 }
 
 
@@ -100,8 +100,28 @@ void anbo_class::rcDataCallback(const sensor_msgs::Joy::ConstPtr& rc_data_in)   
     c_rc_data = *rc_data_in;
 
     if(abs(c_rc_data.axes[5]) > 9000 )  {
+        ROS_INFO_STREAM("trigger successful");
+        // control_authority_check = true;
         obtainCtrlAuthority.request.enable_obtain = false;
         obtain_ctrl_authority_client.call(obtainCtrlAuthority);
+        if(obtainCtrlAuthority.response.result)    {
+            ROS_INFO_STREAM("ctrl authority service call successful");
+        }
+    }
+}
+
+void anbo_class::missionDataCallback(const std_msgs::String::ConstPtr &string_msg){
+    if (string_msg->data == "a"){
+        std::cout << "| [a] Takeoff, Landing Test" << std::endl;
+        test_takeoff_landing();
+    }
+    else if (string_msg->data == "b"){
+        std::cout << "| [b] Position Control Test" << std::endl;
+        test_position_control();
+    }
+    else if (string_msg->data == "c"){
+        std::cout << "| [c] Velocity Control Test" << std::endl;
+        test_velocity_control();
     }
 }
 
@@ -262,7 +282,10 @@ bool anbo_class::test_velocity_control() {
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "anbo_node");
-    anbo_class anbo_object_();
+    anbo_class anbo_object_;
+    // anbo_object_.menu();
+
+
     ros::AsyncSpinner spinner(4); // Use 8 threads -> 3 callbacks + 2 Timer callbacks + 1 spare threads for publishers
     spinner.start();
     ros::waitForShutdown();
