@@ -10,43 +10,43 @@ anbo_class::anbo_class()    {
 anbo_class::~anbo_class()   {
 }
 
-bool anbo_class::menu() {
-    std::cout << "| Available commands:" << std::endl;
-    std::cout << "| [a] Takeoff, Landing Test" << std::endl;
-    std::cout << "| [b] Position Control Test" << std::endl;
-    std::cout << "| [c] Velocity Control Test" << std::endl;
+// bool anbo_class::menu() {
+//     std::cout << "| Available commands:" << std::endl;
+//     std::cout << "| [a] Takeoff, Landing Test" << std::endl;
+//     std::cout << "| [b] Position Control Test" << std::endl;
+//     std::cout << "| [c] Velocity Control Test" << std::endl;
 
-    // std::cout << "| [q] Quit Program" << std::endl;
+//     // std::cout << "| [q] Quit Program" << std::endl;
     
-    std::cout << "Please select command: ";
-    char inputChar;
-    std::cin >> inputChar;
+//     std::cout << "Please select command: ";
+//     char inputChar;
+//     std::cin >> inputChar;
 
-    switch(inputChar)   {
-        case state_Takeoff_Landing:
-        {
-            test_takeoff_landing();
-            break;
-        }
-        case state_Position_Control:
-        {
-            test_position_control();
-            break;
-        }
-        case state_Velocity_Control:
-        {
-            test_velocity_control();
-            break;
-        }
-        case state_Quit: {
-            std::cout << "Quit now ..." << std::endl;
-            return false;
-        }
-        default:
-            break;
-    }
-    return true;
-}
+//     switch(inputChar)   {
+//         case state_Takeoff_Landing:
+//         {
+//             test_takeoff_landing();
+//             break;
+//         }
+//         case state_Position_Control:
+//         {
+//             test_position_control();
+//             break;
+//         }
+//         case state_Velocity_Control:
+//         {
+//             test_velocity_control();
+//             break;
+//         }
+//         case state_Quit: {
+//             std::cout << "Quit now ..." << std::endl;
+//             return false;
+//         }
+//         default:
+//             break;
+//     }
+//     return true;
+// }
 
 void anbo_class::setup()    {
     task_control_client = nh.serviceClient<FlightTaskControl>("/flight_task_control");
@@ -172,6 +172,7 @@ bool anbo_class::call_position_control()    {
     }
 
     for (int i = 0; i < p_waypoints_in.size()/4; i++) {
+        ROS_INFO("%d sequence start!", i);
         int j = i * 4;
         JoystickCommand wp;
         wp.x = p_waypoints_in[j];
@@ -197,10 +198,10 @@ bool anbo_class::call_position_control()    {
         else{
             call_emergency_brake(2.0);
             ROS_ERROR_STREAM("Position Control failed");
-            return false;
+            return control_task.response.result;
         }
     }
-    return true;
+    return control_task.response.result;
 }
 
 bool anbo_class::call_velocity_control()    {
@@ -236,10 +237,10 @@ bool anbo_class::call_velocity_control()    {
         else{
             call_emergency_brake(2.0);
             ROS_ERROR_STREAM("Velocity Control failed");
-            return false;
+            return control_task.response.result;
         }
     }
-    return true;
+    return control_task.response.result;
 }
 
 //// Test
