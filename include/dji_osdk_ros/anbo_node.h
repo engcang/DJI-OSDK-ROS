@@ -26,9 +26,8 @@
 
 class anbo_class    {
     public:
-        anbo_class();
+        anbo_class(const ros::NodeHandle& n);
         ~anbo_class();
-        bool menu();
 
     private:
         //// ROS
@@ -74,14 +73,13 @@ class anbo_class    {
         void rcDataCallback(const sensor_msgs::Joy::ConstPtr& rc_data_in);
         void missionDataCallback(const std_msgs::String::ConstPtr &string_msg);
 
-        
-        void setup();
         void getParam();
 
         bool call_emergency_brake(float sleep_time);
         bool call_takeoff(float sleep_time);
         bool call_landing();
         bool call_position_control();
+        bool move_pos_offset(dji_osdk_ros::FlightTaskControl& task, const dji_osdk_ros::JoystickCommand &offsetDesired, float pos_th, float yaw_th);
         bool call_velocity_control();
 
         bool test_takeoff_landing();

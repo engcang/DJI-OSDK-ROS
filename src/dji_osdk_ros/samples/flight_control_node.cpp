@@ -139,12 +139,20 @@ int main(int argc, char** argv)
           ros::Duration(2.0).sleep();
 
           ROS_INFO_STREAM("Move by position offset request sending ...");
-          moveByPosOffset(control_task, {0.0, 6.0, 6.0, 30.0}, 0.8, 1);
+          moveByPosOffset(control_task, {0.0, 0.0, 6.0, 0.0}, 0.8, 1.0);
           ROS_INFO_STREAM("Step 1 over!");
-          moveByPosOffset(control_task, {6.0, 0.0, -3, -30.0}, 0.8, 1);
+          moveByPosOffset(control_task, {6.0, 0.0, 0.0, 0.0}, 0.8, 1.0);
           ROS_INFO_STREAM("Step 2 over!");
-          moveByPosOffset(control_task, {-6.0, -6.0, 0.0, 0.0}, 0.8, 1);
+          moveByPosOffset(control_task, {0.0, 0.0, 0.0, 90.0}, 0.8, 1.0);
           ROS_INFO_STREAM("Step 3 over!");
+          moveByPosOffset(control_task, {0.0, 6.0, 0.0, 90.0}, 0.8, 1.0);
+          ROS_INFO_STREAM("Step 3 over!");
+          moveByPosOffset(control_task, {-6.0, 0.0, 0.0, 0.0}, 0.8, 1);
+          ROS_INFO_STREAM("Step 4 over!");
+          moveByPosOffset(control_task, {0.0, -6.0, 0.0, 0.0}, 0.8, 1);
+          ROS_INFO_STREAM("Step 5 over!");
+          // moveByPosOffset(control_task, {-6.0, 0.0, 0.0, 90.0}, 0.8, 1);
+          // ROS_INFO_STREAM("Step 6 over!");
 
           control_task.request.task = FlightTaskControl::Request::TASK_LAND;
           ROS_INFO_STREAM("Landing request sending ...");
@@ -314,6 +322,14 @@ int main(int argc, char** argv)
           ros::Duration(2).sleep();
           velocityAndYawRateCtrl({-1.6, -2, 0, 0}, 2200);
           ROS_INFO_STREAM("Step 4 over!EmergencyBrake for 2s\n");
+          emergency_brake_client.call(emergency_brake);
+          ros::Duration(2).sleep();
+          velocityAndYawRateCtrl({0, 0, 0, 45}, 2200);
+          ROS_INFO_STREAM("Step 5 over!EmergencyBrake for 2s\n");
+          emergency_brake_client.call(emergency_brake);
+          ros::Duration(2).sleep();
+          velocityAndYawRateCtrl({0, -2, 0, 45}, 2200);
+          ROS_INFO_STREAM("Step 6 over!EmergencyBrake for 2s\n");
           emergency_brake_client.call(emergency_brake);
           ros::Duration(2).sleep();
 

@@ -3,10 +3,53 @@
 
 using namespace dji_osdk_ros;
 
-anbo_class::anbo_class(const ros::NodeHandle& n) : nh(n)    {
-    ROS_WARN("Class generating...");
+anbo_class::anbo_class()    {
     getParam();
+    setup();
+}
+
+anbo_class::~anbo_class()   {
+}
+
+// bool anbo_class::menu() {
+//     std::cout << "| Available commands:" << std::endl;
+//     std::cout << "| [a] Takeoff, Landing Test" << std::endl;
+//     std::cout << "| [b] Position Control Test" << std::endl;
+//     std::cout << "| [c] Velocity Control Test" << std::endl;
+
+//     // std::cout << "| [q] Quit Program" << std::endl;
     
+//     std::cout << "Please select command: ";
+//     char inputChar;
+//     std::cin >> inputChar;
+
+//     switch(inputChar)   {
+//         case state_Takeoff_Landing:
+//         {
+//             test_takeoff_landing();
+//             break;
+//         }
+//         case state_Position_Control:
+//         {
+//             test_position_control();
+//             break;
+//         }
+//         case state_Velocity_Control:
+//         {
+//             test_velocity_control();
+//             break;
+//         }
+//         case state_Quit: {
+//             std::cout << "Quit now ..." << std::endl;
+//             return false;
+//         }
+//         default:
+//             break;
+//     }
+//     return true;
+// }
+
+void anbo_class::setup()    {
     task_control_client = nh.serviceClient<FlightTaskControl>("/flight_task_control");
     // auto set_go_home_altitude_client = nh.serviceClient<SetGoHomeAltitude>("/set_go_home_altitude");
     // auto get_go_home_altitude_client = nh.serviceClient<GetGoHomeAltitude>("get_go_home_altitude");
@@ -16,18 +59,17 @@ anbo_class::anbo_class(const ros::NodeHandle& n) : nh(n)    {
     // auto get_avoid_enable_client      = nh.serviceClient<GetAvoidEnable>("get_avoid_enable_status");
     obtain_ctrl_authority_client = nh.serviceClient<dji_osdk_ros::ObtainControlAuthority>("obtain_release_control_authority");
     emergency_brake_client       = nh.serviceClient<dji_osdk_ros::EmergencyBrake>("emergency_brake");
-
-    obtainCtrlAuthority.request.enable_obtain = true;
-    obtain_ctrl_authority_client.call(obtainCtrlAuthority);
+    set_joystick_mode_client = nh.serviceClient<SetJoystickMode>("set_joystick_mode");
+    joystick_action_client   = nh.serviceClient<JoystickAction>("joystick_action");
 
     quaternionSub = nh.subscribe("dji_osdk_ros/attitude", 10, &anbo_class::quaternionCallback, this);
     localPositionSub = nh.subscribe("dji_osdk_ros/local_position", 10, &anbo_class::localPositionCallback, this);
+    rcDataSub = nh.subscribe("dji_osdk_ros/rc", 10, &anbo_class::rcDataCallback, this);
     missionStringSub = nh.subscribe("/mission_flag", 10, &anbo_class::missionDataCallback, this);
+  
+    obtainCtrlAuthority.request.enable_obtain = true;
+    obtain_ctrl_authority_client.call(obtainCtrlAuthority);
 }
-
-anbo_class::~anbo_class()   {
-}
-
 
 void anbo_class::getParam() {
     // position control
@@ -53,6 +95,20 @@ void anbo_class::quaternionCallback(const geometry_msgs::QuaternionStamped::Cons
 
 void anbo_class::localPositionCallback(const geometry_msgs::PointStamped::ConstPtr& local_pos_in){
     c_local_pos_cur = *local_pos_in;
+}
+
+void anbo_class::rcDataCallback(const sensor_msgs::Joy::ConstPtr& rc_data_in)   {
+    c_rc_data = *rc_data_in;
+
+    if(abs(c_rc_data.axes[5]) > 9000 )  {
+        ROS_INFO_STREAM("trigger successful");
+        // control_authority_check = true;
+        obtainCtrlAuthority.request.enable_obtain = false;
+        obtain_ctrl_authority_client.call(obtainCtrlAuthority);
+        if(obtainCtrlAuthority.response.result)    {
+            ROS_INFO_STREAM("ctrl authority service call successful");
+        }
+    }
 }
 
 void anbo_class::missionDataCallback(const std_msgs::String::ConstPtr &string_msg){
@@ -150,14 +206,14 @@ bool anbo_class::call_position_control()    {
 }
 
 bool anbo_class::move_pos_offset(FlightTaskControl& task,const JoystickCommand &offsetDesired,
-                    float pos_th, float yaw_th)  {
+                    double pos_th, double yaw_th)  {
     task.request.task = FlightTaskControl::Request::TASK_POSITION_AND_YAW_CONTROL;
     task.request.joystickCommand.x = offsetDesired.x;
     task.request.joystickCommand.y = offsetDesired.y;
     task.request.joystickCommand.z = offsetDesired.z;
     task.request.joystickCommand.yaw = offsetDesired.yaw;
-    task.request.posThresholdInM   = pos_th;
-    task.request.yawThresholdInDeg = yaw_th;
+    task.request.posThresholdInM   = (float)pos_th;
+    task.request.yawThresholdInDeg = (float)yaw_th;
 
     task_control_client.call(task);
     return task.response.result;
@@ -215,55 +271,15 @@ bool anbo_class::test_takeoff_landing() {
 }
 
 bool anbo_class::test_position_control() {
-    // ROS_INFO_STREAM("Position Control Test...");
-    // if(call_takeoff(2.0))   {
-    //     if(call_position_control())  {
-    //         if(call_landing())  {
-    //             ROS_INFO_STREAM("Return to Menu");
-    //         }
-    //     }
-    // }
-    // return true;
-    control_task.request.task = FlightTaskControl::Request::TASK_TAKEOFF;
-    ROS_INFO_STREAM("Takeoff request sending ...");
-    task_control_client.call(control_task);
-    if(control_task.response.result == false)
-    {
-        ROS_ERROR_STREAM("Takeoff task failed");
-        return control_task.response.result;
-    }
-
-    if(control_task.response.result == true)
-    {
-        ROS_INFO_STREAM("Takeoff task successful");
-        ros::Duration(2.0).sleep();
-
-        ROS_INFO_STREAM("Move by position offset request sending ...");
-        move_pos_offset(control_task, {0.0, 0.0, 6.0, 0.0}, 0.8, 1.0);
-        ROS_INFO_STREAM("Step 1 over!");
-        move_pos_offset(control_task, {6.0, 0.0, 0.0, 0.0}, 0.8, 1.0);
-        ROS_INFO_STREAM("Step 2 over!");
-        move_pos_offset(control_task, {-6.0, -6.0, 0.0, 0.0}, 0.8, 1.0);
-        ROS_INFO_STREAM("Step 3 over!");
-        move_pos_offset(control_task, {0.0, 0.0, 0.0, 90.0}, 0.8, 1);
-        ROS_INFO_STREAM("Step 4 over!");
-        move_pos_offset(control_task, {0.0, 6.0, 0.0, 90.0}, 0.8, 1);
-        ROS_INFO_STREAM("Step 5 over!");
-        move_pos_offset(control_task, {-6.0, 0.0, 0.0, 90.0}, 0.8, 1);
-        ROS_INFO_STREAM("Step 6 over!");
-
-        control_task.request.task = FlightTaskControl::Request::TASK_LAND;
-        ROS_INFO_STREAM("Landing request sending ...");
-        task_control_client.call(control_task);
-        if(control_task.response.result == true)
-        {
-            ROS_INFO_STREAM("Land task successful");
-            return control_task.response.result;
+    ROS_INFO_STREAM("Position Control Test...");
+    if(call_takeoff(2.0))   {
+        if(call_position_control())  {
+            if(call_landing())  {
+                ROS_INFO_STREAM("Return to Menu");
+            }
         }
-        ROS_INFO_STREAM("Land task failed.");
-        return control_task.response.result;
     }
-    return control_task.response.result;
+    return true;
 }
 
 bool anbo_class::test_velocity_control() {
@@ -282,8 +298,7 @@ bool anbo_class::test_velocity_control() {
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "anbo_node");
-    ros::NodeHandle n("~");
-    anbo_class anbo_object_(n);
+    anbo_class anbo_object_;
     // anbo_object_.menu();
 
     ros::AsyncSpinner spinner(4); // Use 8 threads -> 3 callbacks + 2 Timer callbacks + 1 spare threads for publishers
