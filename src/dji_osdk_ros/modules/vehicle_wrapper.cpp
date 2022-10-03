@@ -1636,7 +1636,7 @@ static T_OsdkOsalHandler osalHandler = {
     tf::Matrix3x3 m(q_home * q_in);
     double r_, p_, yawDesiredInDeg;
     m.getRPY(r_, p_, yawDesiredInDeg);
-    yawDesiredInDeg = float(yawDesiredInDeg / DEG2RAD);
+    yawDesiredInDeg = yawDesiredInDeg / DEG2RAD;
     
     int timeoutInMilSec = 40000;
     int controlFreqInHz = 50;  // Hz
@@ -1690,7 +1690,7 @@ static T_OsdkOsalHandler osalHandler = {
 
       FlightController::JoystickCommand joystickCommand = {
           positionCommand.x, positionCommand.y,
-          offsetDesired.z + homeHeight, yawDesiredInDeg};
+          offsetDesired.z + homeHeight, float(yawDesiredInDeg)};
       vehicle->flightController->setJoystickCommand(joystickCommand);
       vehicle->flightController->joystickAction();
 
