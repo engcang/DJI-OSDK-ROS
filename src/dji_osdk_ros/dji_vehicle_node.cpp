@@ -190,6 +190,8 @@ void VehicleNode::initService()
    *  flight control server
    *  @platforms M210V2, M300
    */
+  position_control_sub_ = nh_.subscribe("set_local_pose", 1, &VehicleNode::setLocalPoseCallBack, this);
+
   task_control_server_ = nh_.advertiseService("flight_task_control", &VehicleNode::taskCtrlCallback, this);
   joystick_action_server_ = nh_.advertiseService("joystick_action", &VehicleNode::JoystickActionCallback, this);
   set_joystick_mode_server_ = nh_.advertiseService("set_joystick_mode", &VehicleNode::setJoystickModeCallback, this);
@@ -983,6 +985,12 @@ bool VehicleNode::getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &requ
     return false;
   }
 
+}
+
+void VehicleNode::setLocalPoseCallBack(const SetLocalPoseMsg& msg) {
+  ROS_INFO_STREAM("local pose callback");
+  ptr_wrapper_->pubLocalPose(msg);
+  return;
 }
 
 bool VehicleNode::taskCtrlCallback(FlightTaskControl::Request&  request, FlightTaskControl::Response& response)

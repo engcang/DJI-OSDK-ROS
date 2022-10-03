@@ -57,6 +57,8 @@
 #include <std_msgs/String.h>
 #include <nmea_msgs/Sentence.h>
 
+
+#include <dji_osdk_ros/SetLocalPoseMsg.h>
 /*! services */
 //flight control services
 #include <dji_osdk_ros/GetDroneType.h>
@@ -201,6 +203,8 @@ namespace dji_osdk_ros
       /*! services */
       /*! for general */
       ros::ServiceServer get_drone_type_server_;
+      /*! Topic by dongkyu */
+      ros::Subscriber position_control_sub_;
       /*! for flight control */
       ros::ServiceServer obtain_releae_control_authority_server_;
       ros::ServiceServer task_control_server_;
@@ -342,6 +346,9 @@ namespace dji_osdk_ros
       /*! for general */
       bool getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &request,
                                 dji_osdk_ros::GetDroneType::Response &response);
+
+      void setLocalPoseCallBack(const SetLocalPoseMsg& msg);
+
       /*! for flight control */
       bool taskCtrlCallback(FlightTaskControl::Request& request, FlightTaskControl::Response& response);
       bool setJoystickModeCallback(SetJoystickMode::Request& request, SetJoystickMode::Response& response);
