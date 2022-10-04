@@ -957,14 +957,13 @@ static T_OsdkOsalHandler osalHandler = {
     {
       return false;
     }
-    //! Start takeoff
-    //ErrorCode::ErrorCodeType takeoffStatus =
-        vehicle->flightController->startTakeoffSync(timeout);
-
     homeGPSPosition = vehicle->subscribe->getValue<TOPIC_GPS_FUSED>();
     Telemetry::GlobalPosition BroadcastGP_tmp_ = vehicle->broadcast->getGlobalPosition();
     homeHeight = BroadcastGP_tmp_.height;
     homeQuaternion = vehicle->subscribe->getValue<TOPIC_QUATERNION>();
+    //! Start takeoff
+    //ErrorCode::ErrorCodeType takeoffStatus =
+        vehicle->flightController->startTakeoffSync(timeout);
 
     //! Motors start check
     if (!motorStartedCheck()) {
@@ -1627,20 +1626,22 @@ static T_OsdkOsalHandler osalHandler = {
                           homeQuaternion.q2,
                           homeQuaternion.q3,
                           homeQuaternion.q0);
-
+    tf::Matrix3x3 R_home(q_home);
+    tf::Vector3 input_local(input.x, input.y, input.z);
+    tf::Vector3 input_TN(R_home * input_local);
     // get input x,y,z, yaw
     using namespace Telemetry;
-    Vector3f offsetDesired;
-    offsetDesired.x = input.x;
-    offsetDesired.y = input.y;
-    offsetDesired.z = input.z;
-    tf::Quaternion q_desired(input.q_x,
-                            input.q_y,
-                            input.q_z,
-                            input.q_w);
-    tf::Matrix3x3 R_desired(q_home * q_desired);
+    Vector3f offsetDesired_TN;
+    offsetDesired_TN.x = input_TN.x();
+    offsetDesired_TN.y = input_TN.y();
+    offsetDesired_TN.z = input_TN.z();
+    tf::Quaternion q_desired_local(input.q_x,
+                                  input.q_y,
+                                  input.q_z,
+                                  input.q_w);
+    tf::Matrix3x3 R_desired_TN(q_home * q_desired_local);
     double r_, p_, yaw_;
-    R_desired.getRPY(r_, p_, yaw_);
+    R_desired_TN.getRPY(r_, p_, yaw_);
     double yawDesiredInDeg = yaw_ / DEG2RAD;
     
     // set Joystick mode
@@ -1661,37 +1662,35 @@ static T_OsdkOsalHandler osalHandler = {
     Telemetry::GlobalPosition currentBroadcastGP = 
         vehicle->broadcast->getGlobalPosition();
 
-    tf::Quaternion q_cur(currentQuaternion.q1,
+    tf::Quaternion q_cur_TN(currentQuaternion.q1,
                         currentQuaternion.q2,
                         currentQuaternion.q3,
                         currentQuaternion.q0);
-    tf::Matrix3x3 R_cur(q_home * q_cur);
-    // double yaw_cur;
-    // R_cur.getRPY(r_, p_, yaw_cur);
+    tf::Matrix3x3 R_cur_TN(q_cur_TN);
     
     // Cal offset position from home to current      
-    Vector3f localOffset = localOffsetFromGpsAndFusedHeightOffset(
+    Vector3f localOffset_TN = localOffsetFromGpsAndFusedHeightOffset(
                                     currentGPSPosition, homeGPSPosition,
                                     currentBroadcastGP.height, homeHeight);
     // Cal offset position from current to desired
-    Vector3f offsetRemaining = vector3FSub(offsetDesired, localOffset);
+    Vector3f offsetRemaining_TN = vector3FSub(offsetDesired_TN, localOffset_TN);
 
     // transform yaw-oriented xy-coordinate
-    tf::Vector3 pos_cmd(offsetRemaining.x,
-                        offsetRemaining.y,
-                        offsetRemaining.z);
-    tf::Vector3 rotated_pos_cmd(R_cur.inverse() * pos_cmd);
+    tf::Vector3 pos_cmd_TN(offsetRemaining_TN.x,
+                        offsetRemaining_TN.y,
+                        offsetRemaining_TN.z);
+    tf::Vector3 rotated_pos_cmd_TN(R_cur_TN.inverse() * pos_cmd_TN);
     Vector3f positionCommand;
-    positionCommand.x = rotated_pos_cmd.x();
-    positionCommand.y = rotated_pos_cmd.y();
-    positionCommand.z = rotated_pos_cmd.z();
-    
+    positionCommand.x = rotated_pos_cmd_TN.x();
+    positionCommand.y = rotated_pos_cmd_TN.y();
+    positionCommand.z = rotated_pos_cmd_TN.z();
+
     int xy_bound = 2;  // linear velocity bound
     horizCommandLimit(xy_bound, positionCommand.x, positionCommand.y);
 
     FlightController::JoystickCommand joystickCommand = {
         positionCommand.x, positionCommand.y,
-        offsetDesired.z + homeHeight, float(yawDesiredInDeg)};
+        offsetDesired_TN.z + homeHeight, float(yawDesiredInDeg)};
     vehicle->flightController->setJoystickCommand(joystickCommand);
     vehicle->flightController->joystickAction();
   }
