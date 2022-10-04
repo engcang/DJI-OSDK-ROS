@@ -1630,13 +1630,10 @@ static T_OsdkOsalHandler osalHandler = {
 
     // get input x,y,z, yaw
     using namespace Telemetry;
-    // Vector3f desired_global;
-    tf::Vector3 desired_global(input.x,
-                              input.y,
-                              input.z);
-    // desired_global.x = input.x;
-    // desired_global.y = input.y;
-    // desired_global.z = input.z;
+    Vector3f offsetDesired;
+    offsetDesired.x = input.x;
+    offsetDesired.y = input.y;
+    offsetDesired.z = input.z;
     tf::Quaternion q_desired(input.q_x,
                             input.q_y,
                             input.q_z,
@@ -1669,21 +1666,26 @@ static T_OsdkOsalHandler osalHandler = {
                         currentQuaternion.q3,
                         currentQuaternion.q0);
     tf::Matrix3x3 R_cur(q_home * q_cur);
+    // double yaw_cur;
+    // R_cur.getRPY(r_, p_, yaw_cur);
     
-    Vector3f offsetDesired;
-    // tf::Vector3 desired_tmp_(R_desired * desired_global);
-    tf::Vector3 desired_tmp_(R_cur * desired_global);
-    offsetDesired.x = desired_tmp_.x();
-    offsetDesired.y = desired_tmp_.y();
-    offsetDesired.z = desired_tmp_.z();
-
     // Cal offset position from home to current      
     Vector3f localOffset = localOffsetFromGpsAndFusedHeightOffset(
                                     currentGPSPosition, homeGPSPosition,
                                     currentBroadcastGP.height, homeHeight);
     // Cal offset position from current to desired
     Vector3f offsetRemaining = vector3FSub(offsetDesired, localOffset);
-    Vector3f positionCommand = offsetRemaining;
+
+    // transform yaw-oriented xy-coordinate
+    tf::Vector3 pos_cmd(offsetRemaining.x,
+                        offsetRemaining.y,
+                        offsetRemaining.z);
+    tf::Vector3 rotated_pos_cmd(R_cur.inverse() * pos_cmd);
+    Vector3f positionCommand;
+    positionCommand.x = rotated_pos_cmd.x();
+    positionCommand.y = rotated_pos_cmd.y();
+    positionCommand.z = rotated_pos_cmd.z();
+    
     int xy_bound = 2;  // linear velocity bound
     horizCommandLimit(xy_bound, positionCommand.x, positionCommand.y);
 
