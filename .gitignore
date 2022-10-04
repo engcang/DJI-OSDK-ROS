@@ -5,3 +5,4 @@
 *sdk.launch
 build.sh
 .idea/
+.vscode/*

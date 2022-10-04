@@ -72,6 +72,7 @@ find_package(FFMPEG REQUIRED)
 add_message_files(
   FILES
 
+  SetLocalPoseMsg.msg
   FCTimeInUTC.msg
   JoystickParams.msg
   GPSUTC.msg

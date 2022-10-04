@@ -953,9 +953,18 @@ static T_OsdkOsalHandler osalHandler = {
 
   bool VehicleWrapper::monitoredTakeoff(int timeout)
   {
+    if (!startGlobalPositionBroadcast())
+    {
+      return false;
+    }
     //! Start takeoff
     //ErrorCode::ErrorCodeType takeoffStatus =
         vehicle->flightController->startTakeoffSync(timeout);
+
+    homeGPSPosition = vehicle->subscribe->getValue<TOPIC_GPS_FUSED>();
+    Telemetry::GlobalPosition BroadcastGP_tmp_ = vehicle->broadcast->getGlobalPosition();
+    homeHeight = BroadcastGP_tmp_.height;
+    homeQuaternion = vehicle->subscribe->getValue<TOPIC_QUATERNION>();
 
     //! Motors start check
     if (!motorStartedCheck()) {
@@ -1602,6 +1611,126 @@ static T_OsdkOsalHandler osalHandler = {
     return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
   }
 
+  bool VehicleWrapper::pubLocalPose(const SetLocalPoseMsg& input) {
+    if (!vehicle) {
+      std::cout << "Vehicle is a null value!" << std::endl;
+      return false;
+    }
+    if (!startGlobalPositionBroadcast())
+    {
+      return false;
+    }
+
+    tf::Quaternion q_home(homeQuaternion.q0,
+                          homeQuaternion.q1,
+                          homeQuaternion.q2,
+                          homeQuaternion.q3);
+
+    using namespace Telemetry;
+    Vector3f offsetDesired;
+    offsetDesired.x = input.x;
+    offsetDesired.y = input.y;
+    offsetDesired.z = input.z;
+    tf::Quaternion q_in;
+    q_in.setRPY(0, 0, input.yaw * DEG2RAD);
+    tf::Matrix3x3 m(q_home * q_in);
+    double r_, p_, yawDesiredInDeg;
+    m.getRPY(r_, p_, yawDesiredInDeg);
+    yawDesiredInDeg = yawDesiredInDeg / DEG2RAD;
+    
+    int timeoutInMilSec = 40000;
+    int controlFreqInHz = 50;  // Hz
+    int cycleTimeInMs = 1000 / controlFreqInHz;
+    int outOfControlBoundsTimeLimit = 10 * cycleTimeInMs;    // 10 cycles
+    int withinControlBoundsTimeReqmt = 100 * cycleTimeInMs;  // 100 cycles
+    int elapsedTimeInMs = 0;
+    int withinBoundsCounter = 0;
+    int outOfBounds = 0;
+    int brakeCounter = 0;
+    int xy_bound = 2;
+
+    FlightController::JoystickMode joystickMode = {
+      FlightController::HorizontalLogic::HORIZONTAL_POSITION,
+      FlightController::VerticalLogic::VERTICAL_POSITION,
+      FlightController::YawLogic::YAW_ANGLE,
+      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
+      FlightController::StableMode::STABLE_ENABLE,
+    };
+    vehicle->flightController->setJoystickMode(joystickMode);
+
+    while(elapsedTimeInMs < timeoutInMilSec) {
+      Telemetry::TypeMap<TOPIC_GPS_FUSED>::type currentGPSPosition =
+          vehicle->subscribe->getValue<TOPIC_GPS_FUSED>();
+      Telemetry::TypeMap<TOPIC_QUATERNION>::type currentQuaternion =
+          vehicle->subscribe->getValue<TOPIC_QUATERNION>();
+      Telemetry::GlobalPosition currentBroadcastGP = 
+          vehicle->broadcast->getGlobalPosition();
+
+
+      tf::Quaternion q_cur(currentQuaternion.q1,
+                          currentQuaternion.q2,
+                          currentQuaternion.q3,
+                          currentQuaternion.q0);
+      tf::Quaternion q_cmd = q_home * q_cur;
+      Telemetry::Quaternion q_tmp_;
+      q_tmp_.q0 = q_cmd.w();
+      q_tmp_.q1 = q_cmd.x();
+      q_tmp_.q2 = q_cmd.y();
+      q_tmp_.q3 = q_cmd.z();
+      float yawInRad = quaternionToEulerAngle(q_tmp_).z;
+      // float yawInRad = quaternionToEulerAngle(currentQuaternion).z;
+      
+      Vector3f localOffset = localOffsetFromGpsAndFusedHeightOffset(
+                                      currentGPSPosition, homeGPSPosition,
+                                      currentBroadcastGP.height, homeHeight);
+      Vector3f offsetRemaining = vector3FSub(offsetDesired, localOffset);
+      
+      Vector3f positionCommand = offsetRemaining;
+      horizCommandLimit(xy_bound, positionCommand.x, positionCommand.y);
+
+      FlightController::JoystickCommand joystickCommand = {
+          positionCommand.x, positionCommand.y,
+          offsetDesired.z + homeHeight, float(yawDesiredInDeg)};
+      vehicle->flightController->setJoystickCommand(joystickCommand);
+      vehicle->flightController->joystickAction();
+
+      if (vectorNorm(offsetRemaining) < input.posThresholdInM &&
+          std::fabs(yawInRad / DEG2RAD - yawDesiredInDeg) < input.yawThresholdInDeg) {
+        //! 1. We are within bounds; start incrementing our in-bound counter
+        withinBoundsCounter += cycleTimeInMs;
+      } else {
+        if (withinBoundsCounter != 0) {
+          //! 2. Start incrementing an out-of-bounds counter
+          outOfBounds += cycleTimeInMs;
+        }
+      }
+      //! 3. Reset withinBoundsCounter if necessary
+      if (outOfBounds > outOfControlBoundsTimeLimit) {
+        withinBoundsCounter = 0;
+        outOfBounds = 0;
+      }
+      //! 4. If within bounds, set flag and break
+      if (withinBoundsCounter >= withinControlBoundsTimeReqmt) {
+        break;
+      }
+      usleep(cycleTimeInMs * 1000);
+      elapsedTimeInMs += cycleTimeInMs;
+    }
+
+    while (brakeCounter < withinControlBoundsTimeReqmt) {
+      //! TODO: remove emergencyBrake
+      vehicle->flightController->emergencyBrakeAction();
+      usleep(cycleTimeInMs * 1000);
+      brakeCounter += cycleTimeInMs;
+    }
+
+    if (elapsedTimeInMs >= timeoutInMilSec) {
+      std::cout << "Task timeout!\n";
+      return false;
+    }
+    return true;
+  }
+
   bool VehicleWrapper::moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,
                                             float posThresholdInM,float yawThresholdInDeg)
   {
@@ -1736,7 +1865,7 @@ static T_OsdkOsalHandler osalHandler = {
       FlightController::HorizontalLogic::HORIZONTAL_VELOCITY,
       FlightController::VerticalLogic::VERTICAL_VELOCITY,
       FlightController::YawLogic::YAW_RATE,
-      FlightController::HorizontalCoordinate::HORIZONTAL_GROUND,
+      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
       FlightController::StableMode::STABLE_ENABLE,
     };
 
