@@ -44,9 +44,10 @@ VehicleNode::VehicleNode(int test)
   initService();
 }
 
-VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_BROADCAST),
+VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_SUBSCRIBE),
                            R_FLU2FRD_(tf::Matrix3x3(1,  0,  0, 0, -1,  0, 0,  0, -1)),
                            R_ENU2NED_(tf::Matrix3x3(0,  1,  0, 1,  0,  0, 0,  0, -1)),
+                           R_ENU2ROS_(tf::Matrix3x3(0,  1,  0, -1, 0,  0, 0,  0,  1)),
                            curr_align_state_(AlignStatus::UNALIGNED)
 {
   nh_.param("/vehicle_node/app_id",        app_id_, 12345);
@@ -56,9 +57,8 @@ VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_BROADCAST),
   nh_.param("/vehicle_node/baud_rate",     baud_rate_, 921600);
   nh_.param("/vehicle_node/app_version",   app_version_, 1);
   nh_.param("/vehicle_node/drone_version", drone_version_, std::string("M300")); // choose M300 as default
-  nh_.param("/vehicle_node/gravity_const", gravity_const_, 9.801);
+  nh_.param("/vehicle_node/gravity_const", gravity_const_, 9.81);
   nh_.param("/vehicle_node/align_time",    align_time_with_FC_, false);
-  nh_.param("/vehicle_node/use_broadcast", user_select_broadcast_, false);
   bool enable_ad = false;
 #ifdef ADVANCED_SENSING
   enable_ad = true;
@@ -74,9 +74,10 @@ VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_BROADCAST),
   }
   ROS_INFO_STREAM("VehicleNode Start");
 
-  if (NULL != ptr_wrapper_->getVehicle()->subscribe && (!user_select_broadcast_))
+  if (NULL == ptr_wrapper_->getVehicle()->subscribe)
   {
-    telemetry_from_fc_ = TelemetryType::USE_ROS_SUBSCRIBE;
+    ROS_ERROR_STREAM("Vehicle Subscriber inited failed");
+    ros::shutdown();    
   }
 
   initGimbalModule();
@@ -90,12 +91,6 @@ VehicleNode::~VehicleNode()
   if(!ptr_wrapper_->isM100() && telemetry_from_fc_ == TelemetryType::USE_ROS_SUBSCRIBE)
   {
     cleanUpSubscribeFromFC();
-  }
-  else if(telemetry_from_fc_ == TelemetryType::USE_ROS_BROADCAST)
-  {
-    int pkgIndex = static_cast<int>(SubscribePackgeIndex::BROADCAST_BUT_NEED_SUBSCRIBE);
-    int timeout = 1;
-    ptr_wrapper_->teardownSubscription(pkgIndex, timeout);
   }
 }
 
@@ -190,8 +185,6 @@ void VehicleNode::initService()
    *  flight control server
    *  @platforms M210V2, M300
    */
-  position_control_sub_ = nh_.subscribe("set_local_pose", 1, &VehicleNode::setLocalPoseCallBack, this);
-
   task_control_server_ = nh_.advertiseService("flight_task_control", &VehicleNode::taskCtrlCallback, this);
   joystick_action_server_ = nh_.advertiseService("joystick_action", &VehicleNode::JoystickActionCallback, this);
   set_joystick_mode_server_ = nh_.advertiseService("set_joystick_mode", &VehicleNode::setJoystickModeCallback, this);
@@ -326,7 +319,8 @@ void VehicleNode::initService()
 
 bool VehicleNode::initTopic()
 {
-  attitude_publisher_ = nh_.advertise<geometry_msgs::QuaternionStamped>("dji_osdk_ros/attitude", 10);
+  position_control_sub_ = nh_.subscribe("set_local_pose", 1, &VehicleNode::setLocalPoseCallBack, this);
+
 /* @brief Provides various data about the battery
  * @note Most of these details need a DJI Intelligent battery to work correctly
  * (this is usually not the case with A3/N3 based setups)
@@ -375,14 +369,13 @@ bool VehicleNode::initTopic()
    * is armed.
    */
   height_publisher_ = nh_.advertise<std_msgs::Float32>("dji_osdk_ros/height_above_takeoff", 10);
-  velocity_publisher_ = nh_.advertise<geometry_msgs::Vector3Stamped>("dji_osdk_ros/velocity", 10);
   from_mobile_data_publisher_ = nh_.advertise<dji_osdk_ros::MobileData>("dji_osdk_ros/from_mobile_data", 10);
   from_payload_data_publisher_ = nh_.advertise<dji_osdk_ros::PayloadData>("dji_osdk_ros/from_payload_data", 10);
   // TODO: documentation and proper frame id
   gimbal_angle_publisher_ = nh_.advertise<geometry_msgs::Vector3Stamped>("dji_osdk_ros/gimbal_angle", 10);
   rc_publisher_ = nh_.advertise<sensor_msgs::Joy>("dji_osdk_ros/rc", 10);
 
-  local_position_publisher_ = nh_.advertise<geometry_msgs::PointStamped>("dji_osdk_ros/local_position", 10);
+  local_odom_publisher_ = nh_.advertise<nav_msgs::Odometry>("dji_osdk_ros/local_odom", 10);
   local_frame_ref_publisher_ = nh_.advertise<sensor_msgs::NavSatFix>("dji_osdk_ros/local_frame_ref", 10, true);
   time_sync_nmea_publisher_ = nh_.advertise<nmea_msgs::Sentence>("dji_osdk_ros/time_sync_nmea_msg", 10);
   time_sync_gps_utc_publisher_ = nh_.advertise<dji_osdk_ros::GPSUTC>("dji_osdk_ros/time_sync_gps_utc", 10);
@@ -412,75 +405,28 @@ bool VehicleNode::initTopic()
   }
 
   Vehicle* vehicle = ptr_wrapper_->getVehicle();
-  if (telemetry_from_fc_ == TelemetryType::USE_ROS_BROADCAST)
+  ROS_INFO("Use data subscription to get telemetry data!");
+  if(!align_time_with_FC_)
   {
-    ACK::ErrorCode broadcast_set_freq_ack;
-    ROS_INFO("Use legacy data broadcast to get telemetry data!");
-
-    uint8_t defaultFreq[16];
-
-    if (ptr_wrapper_->isM100()) {
-      ptr_wrapper_->setUpM100DefaultFreq(defaultFreq);
-    } else {
-      ptr_wrapper_->setUpA3N3DefaultFreq(defaultFreq);
-    }
-    broadcast_set_freq_ack = ptr_wrapper_->setBroadcastFreq(defaultFreq, WAIT_TIMEOUT);
-
-    if (ACK::getError(broadcast_set_freq_ack)) {
-      ACK::getErrorCodeMessage(broadcast_set_freq_ack, __func__);
-      return false;
-    }
-    // register a callback function whenever a broadcast data is in
-    ptr_wrapper_->setUserBroadcastCallback(&VehicleNode::SDKBroadcastCallback, this);
-
-    /*! some data still need to be subscribed*/
-    int pkgIndex = static_cast<int>(SubscribePackgeIndex::BROADCAST_BUT_NEED_SUBSCRIBE);
-    int freq = 50;
-    int timeout = 1;
-    std::vector<Telemetry::TopicName> topicList50Hz;
-
-    topicList50Hz.push_back(Telemetry::TOPIC_STATUS_FLIGHT);
-    topicList50Hz.push_back(Telemetry::TOPIC_STATUS_DISPLAYMODE);
-    topicList50Hz.push_back(Telemetry::TOPIC_VELOCITY);
-    topicList50Hz.push_back(Telemetry::TOPIC_GPS_FUSED);
-    topicList50Hz.push_back(Telemetry::TOPIC_QUATERNION);
-    if (ptr_wrapper_->isM300())
-    {
-      topicList50Hz.push_back(Telemetry::TOPIC_THREE_GIMBAL_DATA);
-    }
-    else
-    {
-      topicList50Hz.push_back(Telemetry::TOPIC_DUAL_GIMBAL_DATA);
-
-    }
-    int topicSize = topicList50Hz.size();;
-    ptr_wrapper_->setUpSubscription(pkgIndex, freq, topicList50Hz.data(), topicSize, timeout);
+    ROS_INFO("align_time_with_FC set to false. We will use ros time to time stamp messages!");
   }
-  else if (telemetry_from_fc_ == TelemetryType::USE_ROS_SUBSCRIBE)
+  else
   {
-    ROS_INFO("Use data subscription to get telemetry data!");
-    if(!align_time_with_FC_)
-    {
-      ROS_INFO("align_time_with_FC set to false. We will use ros time to time stamp messages!");
-    }
-    else
-    {
-      ROS_INFO("align_time_with_FC set to true. We will time stamp messages based on flight controller time!");
-    }
-
-    // Extra topics that is only available from subscription
-
-    // Details can be found in DisplayMode enum in common_type.h
-    angularRate_publisher_ = nh_.advertise<geometry_msgs::Vector3Stamped>("dji_osdk_ros/angular_velocity_fused", 10);
-    acceleration_publisher_ = nh_.advertise<geometry_msgs::Vector3Stamped>("dji_osdk_ros/acceleration_ground_fused", 10);
-    displaymode_publisher_ = nh_.advertise<std_msgs::UInt8>("dji_osdk_ros/display_mode", 10);
-    trigger_publisher_ = nh_.advertise<sensor_msgs::TimeReference>("dji_osdk_ros/trigger_time", 10);
-
-    if (!initDataSubscribeFromFC())
-    {
-      return false;
-    }
+    ROS_INFO("align_time_with_FC set to true. We will time stamp messages based on flight controller time!");
   }
+
+  // Extra topics that is only available from subscription
+  // Details can be found in DisplayMode enum in common_type.h
+  angularRate_publisher_ = nh_.advertise<geometry_msgs::Vector3Stamped>("dji_osdk_ros/angular_velocity_fused", 10);
+  acceleration_publisher_ = nh_.advertise<geometry_msgs::Vector3Stamped>("dji_osdk_ros/acceleration_ground_fused", 10);
+  displaymode_publisher_ = nh_.advertise<std_msgs::UInt8>("dji_osdk_ros/display_mode", 10);
+  trigger_publisher_ = nh_.advertise<sensor_msgs::TimeReference>("dji_osdk_ros/trigger_time", 10);
+
+  if (!initDataSubscribeFromFC())
+  {
+    return false;
+  }
+
   ptr_wrapper_->setFromMSDKCallback(&VehicleNode::SDKfromMobileDataCallback, this);
   if (vehicle->payloadDevice)
   {
@@ -512,7 +458,6 @@ bool VehicleNode::initDataSubscribeFromFC()
   }
 
   std::vector<Telemetry::TopicName> topicList100Hz;
-  topicList100Hz.push_back(Telemetry::TOPIC_QUATERNION);
   topicList100Hz.push_back(Telemetry::TOPIC_ACCELERATION_GROUND);
   topicList100Hz.push_back(Telemetry::TOPIC_ANGULAR_RATE_FUSIONED);
 
@@ -535,6 +480,7 @@ bool VehicleNode::initDataSubscribeFromFC()
 
   std::vector<Telemetry::TopicName> topicList50Hz;
   // 50 Hz package from FC
+  topicList50Hz.push_back(Telemetry::TOPIC_QUATERNION);
   topicList50Hz.push_back(Telemetry::TOPIC_GPS_FUSED);
   topicList50Hz.push_back(Telemetry::TOPIC_ALTITUDE_FUSIONED);
   topicList50Hz.push_back(Telemetry::TOPIC_HEIGHT_FUSION);

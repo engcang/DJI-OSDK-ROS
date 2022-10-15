@@ -45,6 +45,7 @@
 #include <geometry_msgs/QuaternionStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
 #include <geometry_msgs/PointStamped.h>
+#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <sensor_msgs/Joy.h>
@@ -291,7 +292,6 @@ namespace dji_osdk_ros
 
       /*! publishers */
       //! telemetry data publisher
-      ros::Publisher attitude_publisher_;
       ros::Publisher angularRate_publisher_;
       ros::Publisher acceleration_publisher_;
       ros::Publisher battery_state_publisher_;
@@ -302,7 +302,6 @@ namespace dji_osdk_ros
       ros::Publisher gps_position_publisher_;
       ros::Publisher vo_position_publisher_;
       ros::Publisher height_publisher_;
-      ros::Publisher velocity_publisher_;
       ros::Publisher from_mobile_data_publisher_;
       ros::Publisher from_payload_data_publisher_;
       ros::Publisher gimbal_angle_publisher_;
@@ -317,7 +316,7 @@ namespace dji_osdk_ros
       ros::Publisher rtk_connection_status_publisher_;
       ros::Publisher flight_anomaly_publisher_;
       //! Local Position Publisher (Publishes local position in ENU frame)
-      ros::Publisher local_position_publisher_;
+      ros::Publisher local_odom_publisher_;
       ros::Publisher local_frame_ref_publisher_;
       ros::Publisher time_sync_nmea_publisher_;
       ros::Publisher time_sync_gps_utc_publisher_;
@@ -494,17 +493,18 @@ namespace dji_osdk_ros
       std::string   sample_case_;
       std::string   drone_version_;
       std::string   app_bundle_id_; // reserved
-      bool          user_select_broadcast_;
       bool          align_time_with_FC_;
 
       AlignStatus curr_align_state_;
       ros::Time   base_time_;
-      double      local_pos_ref_latitude_, local_pos_ref_longitude_, local_pos_ref_altitude_;
+      double      local_pos_ref_latitude_, local_pos_ref_longitude_, local_pos_ref_altitude_, local_yaw_offset_=-999.9;
       double      current_gps_latitude_, current_gps_longitude_, current_gps_altitude_;
       bool        local_pos_ref_set_;
       int         current_gps_health_;
       const       tf::Matrix3x3 R_FLU2FRD_;
       const       tf::Matrix3x3 R_ENU2NED_;
+      const       tf::Matrix3x3 R_ENU2ROS_;
+      tf::Matrix3x3 R_yaw_offset_;
       bool        rtk_support_;
 
       bool stereo_subscription_success;

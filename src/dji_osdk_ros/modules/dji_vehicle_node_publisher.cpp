@@ -13,198 +13,6 @@ static double constexpr TIME_DIFF_ALERT = 0.020;
 
 using namespace dji_osdk_ros;
 
-void VehicleNode::SDKBroadcastCallback(Vehicle* vehicle, RecvContainer recvFrame,
-                                       DJI::OSDK::UserData userData)
-{
-  ((VehicleNode*)userData)->dataBroadcastCallback();
-}
-
-void VehicleNode::dataBroadcastCallback()
-{
-  using namespace DJI::OSDK;
-
-  ros::Time now_time = ros::Time::now();
-
-  uint16_t data_enable_flag = ptr_wrapper_->getPassFlag();
-
-  uint16_t flag_has_rc = ptr_wrapper_->isM100() ? (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_RC) :
-                         (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::A3_HAS_RC);
-  if (flag_has_rc)
-  {
-    sensor_msgs::Joy rc_joy;
-    rc_joy.header.stamp    = now_time;
-    rc_joy.header.frame_id = "rc";
-
-    rc_joy.axes.reserve(6);
-    rc_joy.axes.push_back(static_cast<float>(ptr_wrapper_->getRC().roll     / 10000.0));
-    rc_joy.axes.push_back(static_cast<float>(ptr_wrapper_->getRC().pitch    / 10000.0));
-    rc_joy.axes.push_back(static_cast<float>(ptr_wrapper_->getRC().yaw      / 10000.0));
-    rc_joy.axes.push_back(static_cast<float>(ptr_wrapper_->getRC().throttle / 10000.0));
-
-    rc_joy.axes.push_back(static_cast<float>(ptr_wrapper_->getRC().mode));
-    rc_joy.axes.push_back(static_cast<float>(ptr_wrapper_->getRC().gear));
-    rc_publisher_.publish(rc_joy);
-  }
-
-  tf::Matrix3x3 R_FRD2NED;
-  tf::Quaternion q_FLU2ENU;
-
-  if (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_Q)
-  {
-    R_FRD2NED.setRotation(tf::Quaternion(ptr_wrapper_->getQuaternion().q1,
-                                         ptr_wrapper_->getQuaternion().q2,
-                                         ptr_wrapper_->getQuaternion().q3,
-                                         ptr_wrapper_->getQuaternion().q0));
-    tf::Matrix3x3 R_FLU2ENU = R_ENU2NED_.transpose() * R_FRD2NED * R_FLU2FRD_;
-    R_FLU2ENU.getRotation(q_FLU2ENU);
-
-    geometry_msgs::QuaternionStamped q;
-    q.header.stamp = now_time;
-    q.header.frame_id = "body_FLU";
-
-    q.quaternion.w = q_FLU2ENU.getW();
-    q.quaternion.x = q_FLU2ENU.getX();
-    q.quaternion.y = q_FLU2ENU.getY();
-    q.quaternion.z = q_FLU2ENU.getZ();
-
-    attitude_publisher_.publish(q);
-  }
-
-  if ( (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_Q) &&
-       (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_W) &&
-       (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_A))
-  {
-    sensor_msgs::Imu imu;
-
-    imu.header.frame_id = "body_FLU";
-    imu.header.stamp    = now_time;
-
-    imu.linear_acceleration.x =  ptr_wrapper_->getAcceleration().x * gravity_const_;
-    imu.linear_acceleration.y = -ptr_wrapper_->getAcceleration().y * gravity_const_;
-    imu.linear_acceleration.z = -ptr_wrapper_->getAcceleration().z * gravity_const_;
-
-    imu.angular_velocity.x    =  ptr_wrapper_->getAngularRate().x;
-    imu.angular_velocity.y    = -ptr_wrapper_->getAngularRate().y;
-    imu.angular_velocity.z    = -ptr_wrapper_->getAngularRate().z;
-
-    // Since the orientation is duplicated from attitude
-    // at this point, q_FLU2ENU has already been updated
-    imu.orientation.w = q_FLU2ENU.getW();
-    imu.orientation.x = q_FLU2ENU.getX();
-    imu.orientation.y = q_FLU2ENU.getY();
-    imu.orientation.z = q_FLU2ENU.getZ();
-
-    imu_publisher_.publish(imu);
-  }
-
-  if (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_POS)
-  {
-    DJI::OSDK::Telemetry::GlobalPosition global_pos = ptr_wrapper_->getGlobalPosition();
-    std_msgs::UInt8 gps_health;
-    gps_health.data = global_pos.health;
-    gps_health_publisher_.publish(gps_health);
-
-    sensor_msgs::NavSatFix gps_pos;
-    gps_pos.header.stamp    = now_time;
-    gps_pos.header.frame_id = "gps";
-    gps_pos.latitude        = global_pos.latitude * 180 / C_PI;
-    gps_pos.longitude       = global_pos.longitude * 180 / C_PI;
-    gps_pos.altitude        = global_pos.altitude;
-    this->current_gps_latitude_ = gps_pos.latitude;
-    this->current_gps_longitude_ = gps_pos.longitude;
-    this->current_gps_altitude_ = gps_pos.altitude;
-    this->current_gps_health_ = global_pos.health;
-    gps_position_publisher_.publish(gps_pos);
-
-    if(local_pos_ref_set_)
-    {
-      geometry_msgs::PointStamped local_pos;
-      local_pos.header.frame_id = "/local";
-      local_pos.header.stamp = now_time;
-      gpsConvertENU(local_pos.point.x, local_pos.point.y, gps_pos.longitude,
-                    gps_pos.latitude, this->local_pos_ref_longitude_, this->local_pos_ref_latitude_);
-      local_pos.point.z = gps_pos.altitude - this->local_pos_ref_altitude_;
-      /*!
-      * note: We are now following REP 103 to use ENU for
-      *       short-range Cartesian representations. Local position is published
-      *       in ENU Frame
-      */
-
-      this->local_position_publisher_.publish(local_pos);
-    }
-
-    std_msgs::Float32 agl_height;
-    agl_height.data = global_pos.height;
-    height_publisher_.publish(agl_height);
-  }
-
-  if (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_V)
-  {
-    geometry_msgs::Vector3Stamped velocity;
-    velocity.header.stamp    = now_time;
-    velocity.header.frame_id = "ground_ENU";
-
-    velocity.vector.x = ptr_wrapper_->getVelocity().y;
-    velocity.vector.y = ptr_wrapper_->getVelocity().x;
-    velocity.vector.z = ptr_wrapper_->getVelocity().z;
-    velocity_publisher_.publish(velocity);
-  }
-
-  uint16_t flag_has_battery =
-      ptr_wrapper_->isM100() ? (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_BATTERY) :
-      (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::A3_HAS_BATTERY);
-
-  if ( flag_has_battery )
-  {
-    sensor_msgs::BatteryState msg_battery_state;
-    msg_battery_state.header.stamp = now_time;
-    msg_battery_state.capacity = ptr_wrapper_->getBatteryInfo().capacity;
-    msg_battery_state.voltage  = ptr_wrapper_->getBatteryInfo().voltage;
-    msg_battery_state.current  = ptr_wrapper_->getBatteryInfo().current;
-    msg_battery_state.percentage = ptr_wrapper_->getBatteryInfo().percentage;
-    msg_battery_state.charge   = NAN;
-    msg_battery_state.design_capacity = NAN;
-    msg_battery_state.power_supply_health = msg_battery_state.POWER_SUPPLY_HEALTH_UNKNOWN;
-    msg_battery_state.power_supply_status = msg_battery_state.POWER_SUPPLY_STATUS_UNKNOWN;
-    msg_battery_state.power_supply_technology = msg_battery_state.POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
-    msg_battery_state.present = (ptr_wrapper_->getBatteryInfo().voltage!=0);
-    battery_state_publisher_.publish(msg_battery_state);
-  }
-
-  uint16_t flag_has_status =
-      ptr_wrapper_->isM100() ? (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_STATUS) :
-      (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::A3_HAS_STATUS);
-
-  if ( flag_has_status)
-  {
-    Telemetry::TypeMap<Telemetry::TOPIC_STATUS_FLIGHT>::type fs =
-        ptr_wrapper_->getStatus().flight;
-
-    std_msgs::UInt8 flight_status;
-    flight_status.data = fs;
-    flight_status_publisher_.publish(flight_status);
-  }
-
-  uint16_t flag_has_gimbal =
-      ptr_wrapper_->isM100() ? (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::HAS_GIMBAL) :
-      (data_enable_flag & DataBroadcast::DATA_ENABLE_FLAG::A3_HAS_GIMBAL);
-  if (flag_has_gimbal)
-  {
-    Telemetry::Gimbal gimbal_reading;
-
-
-    Telemetry::Gimbal gimbal_angle = ptr_wrapper_->getGimbal();
-
-    geometry_msgs::Vector3Stamped gimbal_angle_vec3;
-
-    gimbal_angle_vec3.header.stamp = now_time;
-    gimbal_angle_vec3.header.frame_id = "ground_ENU";
-    gimbal_angle_vec3.vector.x     = gimbal_angle.roll;
-    gimbal_angle_vec3.vector.y     = gimbal_angle.pitch;
-    gimbal_angle_vec3.vector.z     = gimbal_angle.yaw;
-    gimbal_angle_publisher_.publish(gimbal_angle_vec3);
-  }
-}
 
 void VehicleNode::publish5HzData(Vehicle *vehicle, RecvContainer recvFrame,
                                   DJI::OSDK::UserData userData)
@@ -332,7 +140,6 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   Telemetry::TypeMap<Telemetry::TOPIC_ALTITUDE_FUSIONED>::type fused_altitude =
       vehicle->subscribe->getValue<Telemetry::TOPIC_ALTITUDE_FUSIONED>();
 
-
   sensor_msgs::NavSatFix gps_pos;
   gps_pos.header.frame_id = "/gps";
   gps_pos.header.stamp    = msg_time;
@@ -346,18 +153,47 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
 
   if(p->local_pos_ref_set_)
   {
-    geometry_msgs::PointStamped local_pos;
-    local_pos.header.frame_id = "/local";
-    local_pos.header.stamp = gps_pos.header.stamp;
-    p->gpsConvertENU(local_pos.point.x, local_pos.point.y, gps_pos.longitude,
-                     gps_pos.latitude, p->local_pos_ref_longitude_, p->local_pos_ref_latitude_);
-    local_pos.point.z = gps_pos.altitude - p->local_pos_ref_altitude_;
-    /*!
-    * note: We are now following REP 103 to use ENU for
-    *       short-range Cartesian representations. Local position is published
-    *       in ENU Frame
-    */
-    p->local_position_publisher_.publish(local_pos);
+    nav_msgs::Odometry local_odom;
+    local_odom.header.frame_id = "/local";
+    local_odom.header.stamp = gps_pos.header.stamp;
+
+    // v_FC has 2 fields, data and info. The latter contains the health
+    Telemetry::TypeMap<Telemetry::TOPIC_VELOCITY>::type v_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_VELOCITY>();
+    Telemetry::TypeMap<Telemetry::TOPIC_QUATERNION>::type quat = vehicle->subscribe->getValue<Telemetry::TOPIC_QUATERNION>();
+    Telemetry::TypeMap<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>::type w_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>();
+
+    tf::Matrix3x3 R_FRD2NED(tf::Quaternion(quat.q1, quat.q2, quat.q3, quat.q0));
+    tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
+    if (p->local_yaw_offset_== -999.9)
+    {
+      double _r, _p, _y;
+      (p->R_ENU2ROS_ * R_FLU2ENU).getRPY(_r, _p, _y);
+      p->local_yaw_offset_ = _y;
+      p->R_yaw_offset_.setRPY(0.0, 0.0, p->local_yaw_offset_);
+    }
+    tf::Quaternion q_ROS;
+    (p->R_yaw_offset_.inverse() * p->R_ENU2ROS_ * R_FLU2ENU).getRotation(q_ROS);
+
+
+    local_odom.pose.pose.orientation.w = q_ROS.getW();
+    local_odom.pose.pose.orientation.x = q_ROS.getX();
+    local_odom.pose.pose.orientation.y = q_ROS.getY();
+    local_odom.pose.pose.orientation.z = q_ROS.getZ();
+
+    local_odom.twist.twist.linear.x = v_FC.data.x;
+    local_odom.twist.twist.linear.y = -v_FC.data.y;
+    local_odom.twist.twist.linear.z = v_FC.data.z;
+
+    local_odom.twist.twist.angular.x = w_FC.x;
+    local_odom.twist.twist.angular.y = -w_FC.y;
+    local_odom.twist.twist.angular.z = -w_FC.z;
+
+    p->gpsConvertENU(local_odom.pose.pose.position.y, local_odom.pose.pose.position.x, gps_pos.longitude,
+                  gps_pos.latitude, p->local_pos_ref_longitude_, p->local_pos_ref_latitude_);
+    local_odom.pose.pose.position.y = -local_odom.pose.pose.position.y;
+    local_odom.pose.pose.position.z = gps_pos.altitude - p->local_pos_ref_altitude_;
+
+    p->local_odom_publisher_.publish(local_odom);
   }
 
   Telemetry::TypeMap<Telemetry::TOPIC_HEIGHT_FUSION>::type fused_height =
@@ -373,22 +209,6 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   flight_status.data = fs;
   p->flight_status_publisher_.publish(flight_status);
 
-  Telemetry::TypeMap<Telemetry::TOPIC_VELOCITY>::type v_FC =
-      vehicle->subscribe->getValue<Telemetry::TOPIC_VELOCITY>();
-  geometry_msgs::Vector3Stamped v;
-  // v_FC has 2 fields, data and info. The latter contains the health
-
-
-  /*!
-   * note: We are now following REP 103 to use ENU for
-   *       short-range Cartesian representations
-   */
-  v.header.frame_id = "ground_ENU";
-  v.header.stamp = msg_time;
-  v.vector.x = v_FC.data.y;  //x, y are swapped from NE to EN
-  v.vector.y = v_FC.data.x;
-  v.vector.z = v_FC.data.z; //z sign is already U
-  p->velocity_publisher_.publish(v);
 
   Telemetry::TypeMap<Telemetry::TOPIC_GPS_CONTROL_LEVEL>::type gps_ctrl_level=
       vehicle->subscribe->getValue<Telemetry::TOPIC_GPS_CONTROL_LEVEL>();
@@ -555,29 +375,6 @@ void VehicleNode::publish100HzData(Vehicle *vehicle, RecvContainer recvFrame,
     }
   }
 
-  Telemetry::TypeMap<Telemetry::TOPIC_QUATERNION>::type quat =
-      vehicle->subscribe->getValue<Telemetry::TOPIC_QUATERNION>();
-  geometry_msgs::QuaternionStamped q;
-
-  /*!
-   * note: We are now following REP 103 to use FLU for
-   *       body frame. The quaternion is the rotation from
-   *       body_FLU to ground_ENU
-   */
-  q.header.frame_id = "body_FLU";
-  q.header.stamp    = msg_time;
-
-  tf::Matrix3x3 R_FRD2NED(tf::Quaternion(quat.q1, quat.q2, quat.q3, quat.q0));
-  tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
-  tf::Quaternion q_FLU2ENU;
-  R_FLU2ENU.getRotation(q_FLU2ENU);
-  // @note this mapping is tested
-  q.quaternion.w = q_FLU2ENU.getW();
-  q.quaternion.x = q_FLU2ENU.getX();
-  q.quaternion.y = q_FLU2ENU.getY();
-  q.quaternion.z = q_FLU2ENU.getZ();
-  p->attitude_publisher_.publish(q);
-
   Telemetry::TypeMap<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>::type w_FC =
       vehicle->subscribe->getValue<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>();
 
@@ -668,13 +465,21 @@ void VehicleNode::publish400HzData(Vehicle *vehicle, RecvContainer recvFrame,
   tf::Matrix3x3 R_FRD2NED(tf::Quaternion(hardSync_FC.q.q1, hardSync_FC.q.q2,
                                          hardSync_FC.q.q3, hardSync_FC.q.q0));
   tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
-  tf::Quaternion q_FLU2ENU;
-  R_FLU2ENU.getRotation(q_FLU2ENU);
 
-  synced_imu.orientation.w = q_FLU2ENU.getW();
-  synced_imu.orientation.x = q_FLU2ENU.getX();
-  synced_imu.orientation.y = q_FLU2ENU.getY();
-  synced_imu.orientation.z = q_FLU2ENU.getZ();
+  if (p->local_yaw_offset_== -999.9)
+  {
+    double _r, _p, _y;
+    (p->R_ENU2ROS_ * R_FLU2ENU).getRPY(_r, _p, _y);
+    p->local_yaw_offset_ = _y;
+    p->R_yaw_offset_.setRPY(0.0, 0.0, p->local_yaw_offset_);
+  }
+  tf::Quaternion q_ROS;
+  (p->R_yaw_offset_.inverse() * p->R_ENU2ROS_ * R_FLU2ENU).getRotation(q_ROS);
+
+  synced_imu.orientation.w = q_ROS.getW();
+  synced_imu.orientation.x = q_ROS.getX();
+  synced_imu.orientation.y = q_ROS.getY();
+  synced_imu.orientation.z = q_ROS.getZ();
 
   p->imu_publisher_.publish(synced_imu);
 
