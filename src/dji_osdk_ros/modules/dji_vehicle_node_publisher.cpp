@@ -171,10 +171,11 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
       p->local_yaw_offset_ = _y;
       p->R_yaw_offset_.setRPY(0.0, 0.0, p->local_yaw_offset_);
     }
+    double _r_, _p_;
     tf::Quaternion q_ROS;
     (p->R_yaw_offset_.inverse() * p->R_ENU2ROS_ * R_FLU2ENU).getRotation(q_ROS);
-
-
+    (p->R_yaw_offset_.inverse() * p->R_ENU2ROS_ * R_FLU2ENU).getRPY(_r_, _p_, p->local_curr_yaw_);
+    
     local_odom.pose.pose.orientation.w = q_ROS.getW();
     local_odom.pose.pose.orientation.x = q_ROS.getX();
     local_odom.pose.pose.orientation.y = q_ROS.getY();
@@ -193,6 +194,8 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
     local_odom.pose.pose.position.y = -local_odom.pose.pose.position.y;
     local_odom.pose.pose.position.z = gps_pos.altitude - p->local_pos_ref_altitude_;
 
+    p->local_x_offset_ = local_odom.pose.pose.position.x;
+    p->local_y_offset_ = local_odom.pose.pose.position.y;
     p->local_odom_publisher_.publish(local_odom);
   }
 

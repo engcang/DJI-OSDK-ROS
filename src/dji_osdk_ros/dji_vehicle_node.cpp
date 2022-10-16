@@ -319,7 +319,7 @@ void VehicleNode::initService()
 
 bool VehicleNode::initTopic()
 {
-  position_control_sub_ = nh_.subscribe("set_local_pose", 1, &VehicleNode::setLocalPoseCallBack, this);
+  position_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_pose", 1, &VehicleNode::setLocalPoseCallBack, this);
 
 /* @brief Provides various data about the battery
  * @note Most of these details need a DJI Intelligent battery to work correctly
@@ -933,13 +933,18 @@ bool VehicleNode::getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &requ
 
 }
 
-void VehicleNode::setLocalPoseCallBack(const SetLocalPoseMsg& msg) {
-  ROS_INFO_STREAM("local pose callback");
-  ptr_wrapper_->pubLocalPose(msg);
+void VehicleNode::setLocalPoseCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+  double _r, _p, _y;
+  tf::Matrix3x3 tmp_mat(tf::Quaternion(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w));
+  (R_yaw_offset_ * tmp_mat).getRPY(_r, _p, _y);
+  // ptr_wrapper_->inputLocalPose(msg->pose.position.x-local_x_offset_, -(msg->pose.position.y-local_y_offset_), msg->pose.position.z, -(_y+local_yaw_offset_-local_curr_yaw_)*180.0/M_PI);
+  ptr_wrapper_->inputLocalPose(msg->pose.position.x-local_x_offset_, -(msg->pose.position.y-local_y_offset_), msg->pose.position.z, -_y*180.0/M_PI);
+  // bool inputLocalVel(const double &vx, const double &vy, const double &vz, const double &yaw_rate);
+  // bool inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust);
   return;
 }
 
-bool VehicleNode::taskCtrlCallback(FlightTaskControl::Request&  request, FlightTaskControl::Response& response)
+bool VehicleNode::taskCtrlCallback(FlightTaskControl::Request& request, FlightTaskControl::Response& response)
 {
   ROS_DEBUG("called taskCtrlCallback");
   response.result = false;

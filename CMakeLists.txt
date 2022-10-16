@@ -71,8 +71,6 @@ find_package(FFMPEG REQUIRED)
 ## Generate msg in the 'msg' folder
 add_message_files(
   FILES
-
-  SetLocalPoseMsg.msg
   FCTimeInUTC.msg
   JoystickParams.msg
   GPSUTC.msg

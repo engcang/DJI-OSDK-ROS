@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Created on Tue Feb 26 02:02:03 2019
+Created on Sun Oct 16 10:10:09 2022
 @author: mason
 """
 
@@ -12,9 +12,11 @@ from math import cos, sin
 import numpy as np
 
 import rospy
+from std_msgs.msg import UInt8
+from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import Joy
-from mavros_msgs.srv import SetMode, CommandBool
+from dji_osdk_ros.srv import FlightTaskControl, ObtainControlAuthority
 
 import sys
 import signal
@@ -31,132 +33,95 @@ def rpy_saturation(angle):
         angle=angle+2*np.pi
     return angle
 
-global joy_check
-joy_check=0
-global mav_check
-mav_check=0
-
-global d2r
-global r2d
-global max_rate_x
-global max_rate_y
-global max_vel_x
-global max_vel_y
-global max_vel_z
-global yaw_rate
-yaw_rate = 2
-
-r2d = 180/np.pi
-d2r = np.pi/180
-max_rate_x = 360 * d2r
-max_rate_y = 360 * d2r
-max_vel_x = 10
-max_vel_y = 10
-max_vel_z = 4
-
 ''' class '''
 class robot():
     def __init__(self):
         rospy.init_node('robot_controller', anonymous=True)
-        self.position_pub = rospy.Publisher('/mavros/setpoint_position/local', PoseStamped, queue_size=10)
-        self.pos_sub = rospy.Subscriber('/mavros/local_position/pose', PoseStamped, self.pose_callback)
+        self.position_pub = rospy.Publisher('/dji_osdk_ros/set_local_pose', PoseStamped, queue_size=10)
+        self.pos_sub = rospy.Subscriber('/dji_osdk_ros/local_odom', Odometry, self.pose_callback)
+        self.status_sub = rospy.Subscriber('/dji_osdk_ros/flight_status', UInt8, self.status_callback)
         self.joy_sub = rospy.Subscriber('/joy', Joy, self.joy_callback)
-        self.arming = rospy.ServiceProxy('/mavros/cmd/arming', CommandBool)
-        self.offboarding = rospy.ServiceProxy('/mavros/set_mode', SetMode)
+        self.cmd_srv = rospy.ServiceProxy('/flight_task_control', FlightTaskControl)
+        self.offboard_srv = rospy.ServiceProxy('/obtain_release_control_authority', ObtainControlAuthority)
 
-        self.rate = rospy.Rate(300)
-        self.mode = 2 #default is mode 2
+        self.rate = rospy.Rate(20)
         self.hold = 0 #to stop sending input shortly
+        self.joy_check=0
+        self.mav_check=0
+        self.stat_check=0
+        self.max_vel_x = 5
+        self.max_vel_y = 5
+        self.max_vel_z = 3
+        self.yaw_rate = 1.5
 
+    def status_callback(self, msg):
+        self.stat = msg.data
+        self.stat_check=1
     def pose_callback(self, msg):
-        global mav_check
-        self.truth=msg.pose.position
-        orientation_list = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
+        self.truth=msg.pose.pose.position
+        orientation_list = [msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w]
         (self.roll, self.pitch, self.yaw) = euler_from_quaternion(orientation_list)
-        mav_check=1
+        self.mav_check=1
 
     def joy_callback(self, msg):
         self.joy = msg
-        global joy_check
-        if len(self.joy.axes)>0 or len(self.joy.buttons)>0 :
-            joy_check=1
-            if self.joy.buttons[4]==1:
-                self.mode=1
-            if self.joy.buttons[5]==1:
-                self.mode=2
-            if self.joy.buttons[2]==1:
-                self.arming(True)
-            if self.joy.buttons[3]==1:
-                self.offboarding(base_mode=0, custom_mode="OFFBOARD")
-            if self.joy.buttons[0]==1:
+        if len(msg.axes)>0 or len(msg.buttons)>0:
+            if self.stat_check==1:
+                if msg.buttons[2]==1:
+                    if self.stat==0: #stopped
+                        self.cmd_srv(task=7) #start motor
+                    elif self.stat==1: #armed, ground (cf. 2: flying in air)
+                        self.cmd_srv(task=8) #stop motor
+                if msg.buttons[3]==1:
+                    self.offboard_srv(enable_obtain=True) #obtain control authority
+                if msg.buttons[5]==1:
+                        self.cmd_srv(task=4) #take off
+                if msg.buttons[4]==1:
+                        self.cmd_srv(task=3) #homing and landing
+            if msg.buttons[0]==1:
                 self.hold = self.hold+1
+            self.joy_check=1
 
-def input(rbt):
-    global d2r
-    global r2d
-    global max_rate_x
-    global max_rate_y
-    global max_vel_x
-    global max_vel_y
-    global max_vel_z
-    global yaw_rate
+    def input(self):
+        if self.hold%2==0:
+            pose_input=PoseStamped()
 
-    if rbt.hold%2==0:
-        pose_input=PoseStamped()
-
-        ##Mode 2, default
-        #joy_axes: {pitch: 4, roll: 3, yaw: 0, vertical: 1}
-        if rbt.mode==2:
-            pose_input.pose.position.x= rbt.truth.x + ( rbt.joy.axes[4]*max_vel_x)*cos(rbt.yaw) - ( rbt.joy.axes[3]*max_vel_y)*sin(rbt.yaw)
-            pose_input.pose.position.y= rbt.truth.y + ( rbt.joy.axes[3]*max_vel_y)*cos(rbt.yaw) + ( rbt.joy.axes[4]*max_vel_x)*sin(rbt.yaw)
-            pose_input.pose.position.z= rbt.truth.z + ( rbt.joy.axes[1]*max_vel_z)
-            yaw_input = rpy_saturation(rbt.yaw + yaw_rate*(rbt.joy.axes[0]))
-            qq = quaternion_from_euler(0,0,yaw_input)
-            pose_input.pose.orientation.x = qq[0]
-            pose_input.pose.orientation.y = qq[1]
-            pose_input.pose.orientation.z = qq[2]
-            pose_input.pose.orientation.w = qq[3]
-        ##Mode 1
-        #joy_axes: {pitch: 1, roll: 3, yaw: 0, vertical: 4}
-        elif rbt.mode==1:
-            pose_input.pose.position.x= rbt.truth.x + ( rbt.joy.axes[1]*max_vel_x)*cos(rbt.yaw) - ( rbt.joy.axes[3]*max_vel_y)*sin(rbt.yaw)
-            pose_input.pose.position.y= rbt.truth.y + ( rbt.joy.axes[3]*max_vel_y)*cos(rbt.yaw) + ( rbt.joy.axes[1]*max_vel_x)*sin(rbt.yaw)
-            pose_input.pose.position.z= rbt.truth.z + ( rbt.joy.axes[4]*max_vel_z)
-            yaw_input = rpy_saturation(rbt.yaw + yaw_rate*(rbt.joy.axes[0]))
+            pose_input.pose.position.x = self.truth.x + ( self.joy.axes[4]*self.max_vel_x)*cos(self.yaw) - ( self.joy.axes[3]*self.max_vel_y)*sin(self.yaw)
+            pose_input.pose.position.y = self.truth.y + ( self.joy.axes[3]*self.max_vel_y)*cos(self.yaw) + ( self.joy.axes[4]*self.max_vel_x)*sin(self.yaw)
+            pose_input.pose.position.z = self.truth.z + ( self.joy.axes[1]*self.max_vel_z)
+            yaw_input = rpy_saturation(self.yaw + self.yaw_rate*(self.joy.axes[0]))
             qq = quaternion_from_euler(0,0,yaw_input)
             pose_input.pose.orientation.x = qq[0]
             pose_input.pose.orientation.y = qq[1]
             pose_input.pose.orientation.z = qq[2]
             pose_input.pose.orientation.w = qq[3]
 
-        print("Mode < %d > now, press L1 or R1 to change, Press Button[2],[3] to arm/disarm"%rbt.mode)
-        print("Input : X: %.2f  Y: %.2f  Z: %.2f  Yaw: %.2f "%(pose_input.pose.position.x, pose_input.pose.position.y, pose_input.pose.position.z, yaw_input))
-        print("Position(Meter): X: %.2f Y: %.2f Z: %.2f "%(rbt.truth.x, rbt.truth.y, rbt.truth.z))
-        print("Angle(Degree): roll: %.2f pitch: %.2f yaw: %.2f \n"%(rbt.roll/np.pi*180, rbt.pitch/np.pi*180, rbt.yaw/np.pi*180)) #radian : +-pi
+            print("Input : X: %.2f  Y: %.2f  Z: %.2f  Yaw: %.2f "%(pose_input.pose.position.x, pose_input.pose.position.y, pose_input.pose.position.z, yaw_input))
+            print("Position(Meter): X: %.2f Y: %.2f Z: %.2f "%(self.truth.x, self.truth.y, self.truth.z))
+            print("Angle(Degree): roll: %.2f pitch: %.2f yaw: %.2f \n"%(self.roll/np.pi*180, self.pitch/np.pi*180, self.yaw/np.pi*180)) #radian : +-pi
 
-        pose_input.header.stamp = rospy.Time.now()
-        rbt.position_pub.publish(pose_input)
+            pose_input.header.stamp = rospy.Time.now()
+            self.position_pub.publish(pose_input)
 
-    else:
-        print("Hold now, press Button[0] to control again")
-        print("Position(Meter): X: %.2f Y: %.2f Z: %.2f "%(rbt.truth.x, rbt.truth.y, rbt.truth.z))
-        print("Angle(Degree): roll: %.2f pitch: %.2f yaw: %.2f \n"%(rbt.roll/np.pi*180, rbt.pitch/np.pi*180, rbt.yaw/np.pi*180)) #radian : +-pi
+        else:
+            print("Hold now, press Button[0] to control again")
+            print("Position(Meter): X: %.2f Y: %.2f Z: %.2f "%(self.truth.x, self.truth.y, self.truth.z))
+            print("Angle(Degree): roll: %.2f pitch: %.2f yaw: %.2f \n"%(self.roll/np.pi*180, self.pitch/np.pi*180, self.yaw/np.pi*180)) #radian : +-pi
 
 ##############################################################################################
 
-mav_ctr = robot()
+uav_ctr = robot()
 time.sleep(1) #wait 1 second to assure that all data comes in
 
 ''' main '''
 if __name__ == '__main__':
     while 1:
         try:
-            if joy_check==1 and mav_check==1:
-                input(mav_ctr)
-                mav_ctr.rate.sleep()
+            if uav_ctr.joy_check==1 and uav_ctr.mav_check==1 and uav_ctr.stat_check==1:
+                uav_ctr.input()
             else: 
-                mav_ctr.rate.sleep()
                 pass
+            uav_ctr.rate.sleep()
         except (rospy.ROSInterruptException, SystemExit, KeyboardInterrupt) :
             sys.exit(0)
         #except:

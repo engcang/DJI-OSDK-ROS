@@ -37,7 +37,6 @@
 #include <cmath>
 #include <vector>
 #include <tf/tf.h>
-#include <dji_osdk_ros/SetLocalPoseMsg.h>
 #ifdef ADVANCED_SENSING
 #include <dji_camera_image.hpp>
 #endif
@@ -131,7 +130,9 @@ namespace dji_osdk_ros
       Telemetry::TypeMap<TOPIC_GPS_FUSED>::type homeGPSPosition;
       float32_t homeHeight;
       Telemetry::TypeMap<TOPIC_QUATERNION>::type homeQuaternion;
-      bool pubLocalPose(const SetLocalPoseMsg& input);
+      bool inputLocalPose(const double &x, const double &y, const double &z, const double &yaw);
+      bool inputLocalVel(const double &vx, const double &vy, const double &vz, const double &yaw_rate);
+      bool inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust);
 
       bool moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,
                                 float posThresholdInM = 0.8,float yawThresholdInDeg = 1.0);

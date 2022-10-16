@@ -1610,89 +1610,39 @@ static T_OsdkOsalHandler osalHandler = {
     return sqrt(pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
   }
 
-  bool VehicleWrapper::pubLocalPose(const SetLocalPoseMsg& input) {
+  bool VehicleWrapper::inputLocalPose(const double &x, const double &y, const double &z, const double &yaw)
+  {
     if (!vehicle) {
       std::cout << "Vehicle is a null value!" << std::endl;
       return false;
     }
-    if (!startGlobalPositionBroadcast())
-    {
-      std::cout << "No Broadcast!" << std::endl;
-      return false;
-    }
-
-    // get home point orientation
-    tf::Quaternion q_home(homeQuaternion.q1,
-                          homeQuaternion.q2,
-                          homeQuaternion.q3,
-                          homeQuaternion.q0);
-    tf::Matrix3x3 R_home(q_home);
-    tf::Vector3 input_local(input.x, input.y, input.z);
-    tf::Vector3 input_TN(R_home * input_local);
-    // get input x,y,z, yaw
-    using namespace Telemetry;
-    Vector3f offsetDesired_TN;
-    offsetDesired_TN.x = input_TN.x();
-    offsetDesired_TN.y = input_TN.y();
-    offsetDesired_TN.z = input_TN.z();
-    tf::Quaternion q_desired_local(input.q_x,
-                                  input.q_y,
-                                  input.q_z,
-                                  input.q_w);
-    tf::Matrix3x3 R_desired_TN(q_home * q_desired_local);
-    double r_, p_, yaw_;
-    R_desired_TN.getRPY(r_, p_, yaw_);
-    double yawDesiredInDeg = yaw_ / DEG2RAD;
-    
     // set Joystick mode
     FlightController::JoystickMode joystickMode = {
       FlightController::HorizontalLogic::HORIZONTAL_POSITION,
       FlightController::VerticalLogic::VERTICAL_POSITION,
       FlightController::YawLogic::YAW_ANGLE,
-      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
+      FlightController::HorizontalCoordinate::HORIZONTAL_GROUND,
       FlightController::StableMode::STABLE_ENABLE,
     };
     vehicle->flightController->setJoystickMode(joystickMode);
-
-    // get current pose
-    Telemetry::TypeMap<TOPIC_GPS_FUSED>::type currentGPSPosition =
-        vehicle->subscribe->getValue<TOPIC_GPS_FUSED>();
-    Telemetry::TypeMap<TOPIC_QUATERNION>::type currentQuaternion =
-        vehicle->subscribe->getValue<TOPIC_QUATERNION>();
-    Telemetry::GlobalPosition currentBroadcastGP = 
-        vehicle->broadcast->getGlobalPosition();
-
-    tf::Quaternion q_cur_TN(currentQuaternion.q1,
-                        currentQuaternion.q2,
-                        currentQuaternion.q3,
-                        currentQuaternion.q0);
-    tf::Matrix3x3 R_cur_TN(q_cur_TN);
-    
-    // Cal offset position from home to current      
-    Vector3f localOffset_TN = localOffsetFromGpsAndFusedHeightOffset(
-                                    currentGPSPosition, homeGPSPosition,
-                                    currentBroadcastGP.height, homeHeight);
-    // Cal offset position from current to desired
-    Vector3f offsetRemaining_TN = vector3FSub(offsetDesired_TN, localOffset_TN);
-
-    // transform yaw-oriented xy-coordinate
-    tf::Vector3 pos_cmd_TN(offsetRemaining_TN.x,
-                        offsetRemaining_TN.y,
-                        offsetRemaining_TN.z);
-    tf::Vector3 rotated_pos_cmd_TN(R_cur_TN.inverse() * pos_cmd_TN);
-    Vector3f positionCommand;
-    positionCommand.x = rotated_pos_cmd_TN.x();
-    positionCommand.y = rotated_pos_cmd_TN.y();
-    positionCommand.z = rotated_pos_cmd_TN.z();
-
-    int xy_bound = 2;  // linear velocity bound
-    horizCommandLimit(xy_bound, positionCommand.x, positionCommand.y);
-
-    FlightController::JoystickCommand joystickCommand = {
-        positionCommand.x, positionCommand.y,
-        offsetDesired_TN.z + homeHeight, float(yawDesiredInDeg)};
+    // Pub Joystick values
+    FlightController::JoystickCommand joystickCommand = {x, y, z, yaw};
     vehicle->flightController->setJoystickCommand(joystickCommand);
     vehicle->flightController->joystickAction();
+  }
+  bool VehicleWrapper::inputLocalVel(const double &vx, const double &vy, const double &vz, const double &yaw_rate)
+  {
+    if (!vehicle) {
+      std::cout << "Vehicle is a null value!" << std::endl;
+      return false;
+    }
+  }
+  bool VehicleWrapper::inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust)
+  {
+    if (!vehicle) {
+      std::cout << "Vehicle is a null value!" << std::endl;
+      return false;
+    }
   }
 
   bool VehicleWrapper::moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,

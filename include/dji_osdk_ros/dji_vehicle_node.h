@@ -346,7 +346,7 @@ namespace dji_osdk_ros
       bool getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &request,
                                 dji_osdk_ros::GetDroneType::Response &response);
 
-      void setLocalPoseCallBack(const SetLocalPoseMsg& msg);
+      void setLocalPoseCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg);
 
       /*! for flight control */
       bool taskCtrlCallback(FlightTaskControl::Request& request, FlightTaskControl::Response& response);
@@ -498,6 +498,7 @@ namespace dji_osdk_ros
       AlignStatus curr_align_state_;
       ros::Time   base_time_;
       double      local_pos_ref_latitude_, local_pos_ref_longitude_, local_pos_ref_altitude_, local_yaw_offset_=-999.9;
+      double      local_x_offset_, local_y_offset_, local_curr_yaw_;
       double      current_gps_latitude_, current_gps_longitude_, current_gps_altitude_;
       bool        local_pos_ref_set_;
       int         current_gps_health_;
