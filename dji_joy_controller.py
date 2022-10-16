@@ -14,7 +14,7 @@ import numpy as np
 import rospy
 from std_msgs.msg import UInt8
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from sensor_msgs.msg import Joy
 from dji_osdk_ros.srv import FlightTaskControl, ObtainControlAuthority, SetLocalPosRef
 
@@ -38,6 +38,8 @@ class robot():
     def __init__(self):
         rospy.init_node('robot_controller', anonymous=True)
         self.position_pub = rospy.Publisher('/dji_osdk_ros/set_local_pose', PoseStamped, queue_size=10)
+        self.velocity_pub = rospy.Publisher('/dji_osdk_ros/set_local_vel', TwistStamped, queue_size=10)
+        self.pqrt_pub = rospy.Publisher('/dji_osdk_ros/set_body_rates', TwistStamped, queue_size=10)
         self.pos_sub = rospy.Subscriber('/dji_osdk_ros/local_odom', Odometry, self.pose_callback)
         self.status_sub = rospy.Subscriber('/dji_osdk_ros/flight_status', UInt8, self.status_callback)
         self.joy_sub = rospy.Subscriber('/joy', Joy, self.joy_callback)
@@ -47,7 +49,7 @@ class robot():
 
         self.rate = rospy.Rate(20)
         self.hold = 0 #to stop sending input shortly
-        self.mode = 0 #0: position, 1: velocity, 2: attitude, 3: pqrt
+        self.mode = 0 #0: position, 1: velocity, 2: pqrt
         self.joy_check=0
         self.mav_check=0
         self.stat_check=0
@@ -86,7 +88,7 @@ class robot():
                 self.hold = self.hold+1
             if msg.buttons[1]==1:
                 self.mode = self.mode+1
-                if self.mode==4:
+                if self.mode==3:
                     self.mode = 0
             self.joy_check=1
 
@@ -94,7 +96,6 @@ class robot():
         if self.hold%2==0:
             if self.mode==0:
                 pose_input=PoseStamped()
-
                 pose_input.pose.position.x = self.truth.x + ( self.joy.axes[4]*self.max_vel_x)*cos(self.yaw) - ( self.joy.axes[3]*self.max_vel_y)*sin(self.yaw)
                 pose_input.pose.position.y = self.truth.y + ( self.joy.axes[3]*self.max_vel_y)*cos(self.yaw) + ( self.joy.axes[4]*self.max_vel_x)*sin(self.yaw)
                 pose_input.pose.position.z = self.truth.z + ( self.joy.axes[1]*self.max_vel_z)
@@ -104,17 +105,28 @@ class robot():
                 pose_input.pose.orientation.y = qq[1]
                 pose_input.pose.orientation.z = qq[2]
                 pose_input.pose.orientation.w = qq[3]
-
                 pose_input.header.stamp = rospy.Time.now()
                 self.position_pub.publish(pose_input)
 
             elif self.mode==1:
+                vel_input=TwistStamped()
+                vel_input.twist.linear.x = ( self.joy.axes[4]*self.max_vel_x)*cos(self.yaw) - ( self.joy.axes[3]*self.max_vel_y)*sin(self.yaw)
+                vel_input.twist.linear.y = ( self.joy.axes[3]*self.max_vel_y)*cos(self.yaw) + ( self.joy.axes[4]*self.max_vel_x)*sin(self.yaw)
+                vel_input.twist.linear.z = ( self.joy.axes[1]*self.max_vel_z)
+                vel_input.twist.angular.z = self.yaw_rate*(self.joy.axes[0])
+                vel_input.header.stamp = rospy.Time.now()
+                self.velocity_pub.publish(vel_input)
 
             elif self.mode==2:
+                body_rates_input=TwistStamped()
+                body_rates_input.twist.angular.x = -self.joy.axes[3]
+                body_rates_input.twist.angular.y = self.joy.axes[4]
+                body_rates_input.twist.angular.z = self.joy.axes[0]
+                body_rates_input.twist.linear.z = 0.3 + self.joy.axes[1]/0.5
+                body_rates_input.header.stamp = rospy.Time.now()
+                self.pqrt_pub.publish(body_rates_input)
 
-            elif self.mode==3:
-
-
+            print("Current mode: <%d>, 0:pos, 1:vel, 2:pqr"%self.mode)
             print("Position(Meter): X: %.2f Y: %.2f Z: %.2f "%(self.truth.x, self.truth.y, self.truth.z))
             print("Angle(Degree): roll: %.2f pitch: %.2f yaw: %.2f \n"%(self.roll/np.pi*180, self.pitch/np.pi*180, self.yaw/np.pi*180)) #radian : +-pi
         else:

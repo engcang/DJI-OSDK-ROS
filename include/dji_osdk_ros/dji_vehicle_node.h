@@ -45,6 +45,8 @@
 #include <geometry_msgs/QuaternionStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
 #include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/TwistStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/NavSatFix.h>
@@ -213,8 +215,10 @@ namespace dji_osdk_ros
       /*! services */
       /*! for general */
       ros::ServiceServer get_drone_type_server_;
-      /*! Topic by dongkyu */
+      /*! Topic by URL */
       ros::Subscriber position_control_sub_;
+      ros::Subscriber velocity_control_sub_;
+      ros::Subscriber pqrt_control_sub_;
       /*! for flight control */
       ros::ServiceServer obtain_releae_control_authority_server_;
       ros::ServiceServer task_control_server_;
@@ -355,7 +359,9 @@ namespace dji_osdk_ros
       bool getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &request,
                                 dji_osdk_ros::GetDroneType::Response &response);
 
-      void setLocalPoseCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg);
+      void localPositionCtrlCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+      void localVelocityCtrlCallback(const geometry_msgs::TwistStamped::ConstPtr& msg);
+      void bodyAngularRateCtrlCallback(const geometry_msgs::TwistStamped::ConstPtr& msg);
 
       /*! for flight control */
       bool taskCtrlCallback(FlightTaskControl::Request& request, FlightTaskControl::Response& response);
@@ -503,8 +509,8 @@ namespace dji_osdk_ros
       std::string   drone_version_;
       std::string   app_bundle_id_; // reserved
       bool          align_time_with_FC_;
-      double        xy_pos_threshold_;
-      double        z_pos_threshold_;
+      double        xy_pos_threshold_, xy_vel_threshold_, xy_body_rates_threshold_;
+      double        z_pos_threshold_, z_vel_threshold_, z_body_rates_threshold_;
 
       AlignStatus curr_align_state_;
       ros::Time   base_time_;

@@ -10,6 +10,10 @@
     <param name="enc_key" type="string" value="6f109aed0b6b170fc4edefaa6b97dec395af82f92ef56692a2aa85a3d896dfde"/>
     <param name="gravity_const" type="double" value="9.8066"/>
     <param name="xy_pos_threshold" type="double" value="3.0"/>
+    <param name="xy_vel_threshold" type="double" value="3.0"/> <!-- max: 30.0m/s -->
+    <param name="xy_body_rates_threshold" type="double" value="2.0"/> <!-- max: 2.617rad/s = 150.0deg/s -->
     <param name="z_pos_threshold" type="double" value="2.0"/>
+    <param name="z_vel_threshold" type="double" value="2.0"/> <!-- max: 5.0m/s -->
+    <param name="z_body_rates_threshold" type="double" value="1.5"/> <!-- max: 2.617rad/s = 150.0deg/s -->
     </node>
 </launch>

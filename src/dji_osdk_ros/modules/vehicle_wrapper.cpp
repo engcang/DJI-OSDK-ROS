@@ -1636,6 +1636,19 @@ static T_OsdkOsalHandler osalHandler = {
       std::cout << "Vehicle is a null value!" << std::endl;
       return false;
     }
+    // set Joystick mode
+    FlightController::JoystickMode joystickMode = {
+      FlightController::HorizontalLogic::HORIZONTAL_VELOCITY,
+      FlightController::VerticalLogic::VERTICAL_VELOCITY,
+      FlightController::YawLogic::YAW_RATE,
+      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
+      FlightController::StableMode::STABLE_ENABLE,
+    };
+    vehicle->flightController->setJoystickMode(joystickMode);
+    // Pub Joystick values
+    FlightController::JoystickCommand joystickCommand = {vx, vy, vz, yaw_rate};
+    vehicle->flightController->setJoystickCommand(joystickCommand);
+    vehicle->flightController->joystickAction();
   }
   bool VehicleWrapper::inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust)
   {
@@ -1643,6 +1656,19 @@ static T_OsdkOsalHandler osalHandler = {
       std::cout << "Vehicle is a null value!" << std::endl;
       return false;
     }
+    // set Joystick mode
+    FlightController::JoystickMode joystickMode = {
+      FlightController::HorizontalLogic::HORIZONTAL_ANGULAR_RATE,
+      FlightController::VerticalLogic::VERTICAL_THRUST,
+      FlightController::YawLogic::YAW_RATE,
+      FlightController::HorizontalCoordinate::HORIZONTAL_BODY,
+      FlightController::StableMode::STABLE_DISABLE,
+    };
+    vehicle->flightController->setJoystickMode(joystickMode);
+    // Pub Joystick values
+    FlightController::JoystickCommand joystickCommand = {p, q, thrust, r};
+    vehicle->flightController->setJoystickCommand(joystickCommand);
+    vehicle->flightController->joystickAction();
   }
 
   bool VehicleWrapper::moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,

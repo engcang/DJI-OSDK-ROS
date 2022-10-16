@@ -50,17 +50,22 @@ VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_SUBSCRIBE),
                            R_ENU2ROS_(tf::Matrix3x3(0,  1,  0, -1, 0,  0, 0,  0,  1)),
                            curr_align_state_(AlignStatus::UNALIGNED)
 {
-  nh_.param("/vehicle_node/app_id",        app_id_, 12345);
-  nh_.param("/vehicle_node/enc_key",       enc_key_, std::string("abcde123"));
-  nh_.param("/vehicle_node/acm_name",      device_acm_, std::string("/dev/ttyACM0"));
-  nh_.param("/vehicle_node/serial_name",   device_, std::string("/dev/ttyUSB0"));
-  nh_.param("/vehicle_node/baud_rate",     baud_rate_, 921600);
-  nh_.param("/vehicle_node/app_version",   app_version_, 1);
-  nh_.param("/vehicle_node/drone_version", drone_version_, std::string("M300")); // choose M300 as default
-  nh_.param("/vehicle_node/gravity_const", gravity_const_, 9.81);
-  nh_.param("/vehicle_node/align_time",    align_time_with_FC_, false);
-  nh_.param("/vehicle_node/xy_pos_threshold",    xy_pos_threshold_, 3.0);
-  nh_.param("/vehicle_node/z_pos_threshold",    z_pos_threshold_, 2.0);
+  nh_.param("/vehicle_node/app_id",                  app_id_, 12345);
+  nh_.param("/vehicle_node/enc_key",                 enc_key_, std::string("abcde123"));
+  nh_.param("/vehicle_node/acm_name",                device_acm_, std::string("/dev/ttyACM0"));
+  nh_.param("/vehicle_node/serial_name",             device_, std::string("/dev/ttyUSB0"));
+  nh_.param("/vehicle_node/baud_rate",               baud_rate_, 921600);
+  nh_.param("/vehicle_node/app_version",             app_version_, 1);
+  nh_.param("/vehicle_node/drone_version",           drone_version_, std::string("M300")); // choose M300 as default
+  nh_.param("/vehicle_node/gravity_const",           gravity_const_, 9.81);
+  nh_.param("/vehicle_node/align_time",              align_time_with_FC_, false);
+  nh_.param("/vehicle_node/xy_pos_threshold",        xy_pos_threshold_, 3.0);
+  nh_.param("/vehicle_node/xy_vel_threshold",        xy_vel_threshold_, 2.0);
+  nh_.param("/vehicle_node/xy_body_rates_threshold", xy_body_rates_threshold_, 2.0);
+  nh_.param("/vehicle_node/z_pos_threshold",         z_pos_threshold_, 2.0);
+  nh_.param("/vehicle_node/z_vel_threshold",         z_vel_threshold_, 2.0);
+  nh_.param("/vehicle_node/z_body_rates_threshold",  z_body_rates_threshold_, 2.0);
+
   bool enable_ad = false;
 #ifdef ADVANCED_SENSING
   enable_ad = true;
@@ -321,7 +326,9 @@ void VehicleNode::initService()
 
 bool VehicleNode::initTopic()
 {
-  position_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_pose", 1, &VehicleNode::setLocalPoseCallBack, this);
+  position_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_pose", 3, &VehicleNode::localPositionCtrlCallback, this);
+  velocity_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_vel", 3, &VehicleNode::localVelocityCtrlCallback, this);
+  pqrt_control_sub_ = nh_.subscribe("dji_osdk_ros/set_body_rates", 3, &VehicleNode::bodyAngularRateCtrlCallback, this);
 
 /* @brief Provides various data about the battery
  * @note Most of these details need a DJI Intelligent battery to work correctly
@@ -935,7 +942,32 @@ bool VehicleNode::getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &requ
 
 }
 
-void VehicleNode::setLocalPoseCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+void VehicleNode::bodyAngularRateCtrlCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
+  /// ROS coordinates  
+  tf::Vector3 limited_input(
+              val_sat(msg->twist.angular.x, xy_body_rates_threshold_)*180.0/M_PI,
+              val_sat(msg->twist.angular.y, xy_body_rates_threshold_)*180.0/M_PI,
+              val_sat(msg->twist.angular.z, z_body_rates_threshold_)*180.0/M_PI);
+  /// DJI coordinates
+  ptr_wrapper_->inputBodyRateThrust(limited_input.x(), -limited_input.y(), -limited_input.z(), msg->twist.linear.z*100.0);
+  return;
+}
+void VehicleNode::localVelocityCtrlCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
+  /// ROS coordinates
+  tf::Matrix3x3 R_curr_yaw_;
+  R_curr_yaw_.setRPY(0.0, 0.0, local_curr_yaw_);
+  tf::Vector3 limited_input (
+              val_sat(msg->twist.linear.x, xy_vel_threshold_),
+              val_sat(msg->twist.linear.y, xy_vel_threshold_),
+              val_sat(msg->twist.linear.z, z_vel_threshold_));
+  tf::Vector3 limited_input_tf (R_curr_yaw_.inverse() * limited_input);
+
+  /// DJI coordinates
+  ptr_wrapper_->inputLocalVel(limited_input_tf.x(), -limited_input_tf.y(), limited_input_tf.z(), -val_sat(msg->twist.angular.z, z_body_rates_threshold_)*180.0/M_PI);
+  return;
+}
+void VehicleNode::localPositionCtrlCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+  /// ROS coordinates
   double _r, _p, _yaw_input;
   tf::Matrix3x3 tmp_mat(tf::Quaternion(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w));
   (R_yaw_offset_ * tmp_mat).getRPY(_r, _p, _yaw_input);
@@ -948,9 +980,8 @@ void VehicleNode::setLocalPoseCallBack(const geometry_msgs::PoseStamped::ConstPt
               val_sat(msg->pose.position.z-local_z_offset_, z_pos_threshold_)+local_z_offset_);
   tf::Vector3 limited_input_tf (R_curr_yaw_.inverse() * limited_input);
 
+  /// DJI coordinates
   ptr_wrapper_->inputLocalPose(limited_input_tf.x(), -limited_input_tf.y(), limited_input_tf.z(), -_yaw_input*180.0/M_PI);
-  // bool inputLocalVel(const double &vx, const double &vy, const double &vz, const double &yaw_rate);
-  // bool inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust);
   return;
 }
 
