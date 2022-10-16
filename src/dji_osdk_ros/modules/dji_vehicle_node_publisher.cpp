@@ -196,6 +196,7 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
 
     p->local_x_offset_ = local_odom.pose.pose.position.x;
     p->local_y_offset_ = local_odom.pose.pose.position.y;
+    p->local_z_offset_ = local_odom.pose.pose.position.z;
     p->local_odom_publisher_.publish(local_odom);
   }
 

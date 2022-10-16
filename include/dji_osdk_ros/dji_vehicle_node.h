@@ -200,6 +200,15 @@ namespace dji_osdk_ros
       bool initTopic();
       bool initDataSubscribeFromFC();
       bool cleanUpSubscribeFromFC();
+      inline double val_sat(const double &val, const double &thres)
+      {
+        if (val >= thres)
+          return thres;
+        if (val < -thres)
+          return -thres;
+        return val;
+      }
+
     protected:
       /*! services */
       /*! for general */
@@ -494,11 +503,13 @@ namespace dji_osdk_ros
       std::string   drone_version_;
       std::string   app_bundle_id_; // reserved
       bool          align_time_with_FC_;
+      double        xy_pos_threshold_;
+      double        z_pos_threshold_;
 
       AlignStatus curr_align_state_;
       ros::Time   base_time_;
       double      local_pos_ref_latitude_, local_pos_ref_longitude_, local_pos_ref_altitude_, local_yaw_offset_=-999.9;
-      double      local_x_offset_, local_y_offset_, local_curr_yaw_;
+      double      local_x_offset_, local_y_offset_, local_z_offset_, local_curr_yaw_;
       double      current_gps_latitude_, current_gps_longitude_, current_gps_altitude_;
       bool        local_pos_ref_set_;
       int         current_gps_health_;

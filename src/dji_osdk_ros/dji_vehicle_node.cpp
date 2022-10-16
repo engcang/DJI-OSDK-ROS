@@ -59,6 +59,8 @@ VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_SUBSCRIBE),
   nh_.param("/vehicle_node/drone_version", drone_version_, std::string("M300")); // choose M300 as default
   nh_.param("/vehicle_node/gravity_const", gravity_const_, 9.81);
   nh_.param("/vehicle_node/align_time",    align_time_with_FC_, false);
+  nh_.param("/vehicle_node/xy_pos_threshold",    xy_pos_threshold_, 3.0);
+  nh_.param("/vehicle_node/z_pos_threshold",    z_pos_threshold_, 2.0);
   bool enable_ad = false;
 #ifdef ADVANCED_SENSING
   enable_ad = true;
@@ -934,11 +936,19 @@ bool VehicleNode::getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &requ
 }
 
 void VehicleNode::setLocalPoseCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg) {
-  double _r, _p, _y;
+  double _r, _p, _yaw_input;
   tf::Matrix3x3 tmp_mat(tf::Quaternion(msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z, msg->pose.orientation.w));
-  (R_yaw_offset_ * tmp_mat).getRPY(_r, _p, _y);
-  // ptr_wrapper_->inputLocalPose(msg->pose.position.x-local_x_offset_, -(msg->pose.position.y-local_y_offset_), msg->pose.position.z, -(_y+local_yaw_offset_-local_curr_yaw_)*180.0/M_PI);
-  ptr_wrapper_->inputLocalPose(msg->pose.position.x-local_x_offset_, -(msg->pose.position.y-local_y_offset_), msg->pose.position.z, -_y*180.0/M_PI);
+  (R_yaw_offset_ * tmp_mat).getRPY(_r, _p, _yaw_input);
+
+  tf::Matrix3x3 R_curr_yaw_;
+  R_curr_yaw_.setRPY(0.0, 0.0, local_curr_yaw_);
+  tf::Vector3 limited_input (
+              val_sat(msg->pose.position.x-local_x_offset_, xy_pos_threshold_),
+              val_sat(msg->pose.position.y-local_y_offset_, xy_pos_threshold_),
+              val_sat(msg->pose.position.z-local_z_offset_, z_pos_threshold_)+local_z_offset_);
+  tf::Vector3 limited_input_tf (R_curr_yaw_.inverse() * limited_input);
+
+  ptr_wrapper_->inputLocalPose(limited_input_tf.x(), -limited_input_tf.y(), limited_input_tf.z(), -_yaw_input*180.0/M_PI);
   // bool inputLocalVel(const double &vx, const double &vy, const double &vz, const double &yaw_rate);
   // bool inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust);
   return;

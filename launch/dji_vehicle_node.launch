@@ -9,5 +9,7 @@
     <param name="align_time" type="bool" value="false"/> <!-- false: use ROS time -->
     <param name="enc_key" type="string" value="6f109aed0b6b170fc4edefaa6b97dec395af82f92ef56692a2aa85a3d896dfde"/>
     <param name="gravity_const" type="double" value="9.8066"/>
+    <param name="xy_pos_threshold" type="double" value="3.0"/>
+    <param name="z_pos_threshold" type="double" value="2.0"/>
     </node>
 </launch>
