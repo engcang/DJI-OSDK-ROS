@@ -151,19 +151,22 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   p->current_gps_altitude_ = fused_altitude;
   p->gps_position_publisher_.publish(gps_pos);
 
+  // local odom in ROS: velocity, orientation, angular rates
+  Telemetry::TypeMap<Telemetry::TOPIC_VELOCITY>::type v_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_VELOCITY>();
+  Telemetry::TypeMap<Telemetry::TOPIC_QUATERNION>::type quat = vehicle->subscribe->getValue<Telemetry::TOPIC_QUATERNION>();
+  Telemetry::TypeMap<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>::type w_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>();
+  // used for gimbal angles and orientation
+  double _not_used_r_, _not_used_p_;
+  tf::Matrix3x3 R_FRD2NED(tf::Quaternion(quat.q1, quat.q2, quat.q3, quat.q0));
+  tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
+  R_FRD2NED.getRPY(_not_used_r_, _not_used_p_, p->Yaw_NED_world_offset_);
+
   if(p->local_pos_ref_set_)
   {
     nav_msgs::Odometry local_odom;
     local_odom.header.frame_id = "/local";
     local_odom.header.stamp = gps_pos.header.stamp;
 
-    // v_FC has 2 fields, data and info. The latter contains the health
-    Telemetry::TypeMap<Telemetry::TOPIC_VELOCITY>::type v_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_VELOCITY>();
-    Telemetry::TypeMap<Telemetry::TOPIC_QUATERNION>::type quat = vehicle->subscribe->getValue<Telemetry::TOPIC_QUATERNION>();
-    Telemetry::TypeMap<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>::type w_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>();
-
-    tf::Matrix3x3 R_FRD2NED(tf::Quaternion(quat.q1, quat.q2, quat.q3, quat.q0));
-    tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
     if (p->local_yaw_offset_== -999.9)
     {
       double _r, _p, _y;
@@ -227,9 +230,9 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   geometry_msgs::Vector3Stamped gimbal_angle_vec3;
 
   gimbal_angle_vec3.header.stamp = ros::Time::now();
-  gimbal_angle_vec3.vector.x     = gimbal_angle.x;
-  gimbal_angle_vec3.vector.y     = gimbal_angle.y;
-  gimbal_angle_vec3.vector.z     = gimbal_angle.z;
+  gimbal_angle_vec3.vector.x     = gimbal_angle.y;
+  gimbal_angle_vec3.vector.y     = -gimbal_angle.x;
+  gimbal_angle_vec3.vector.z     = -(gimbal_angle.z - p->Yaw_NED_world_offset_*180.0/M_PI);
   p->gimbal_angle_publisher_.publish(gimbal_angle_vec3);
 
   // See dji_sdk.h for details about display_mode

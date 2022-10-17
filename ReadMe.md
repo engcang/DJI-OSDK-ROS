@@ -1,10 +1,12 @@
 ## DJI OSDK-ROS URL
 + For M300 RTK
-+ Position / Velocity / Bodyrates+Thrust control
-   + [Pending] Gimbal control
-+ Take / hand over control
 + Frame converting to ROS
-
++ Position / Velocity / Bodyrates+Thrust control
++ Gimbal control
++ Examples
+   + Joystick control
+   + Square control
+      + Take / hand over control
 
 
 

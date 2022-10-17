@@ -1187,11 +1187,11 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
     return false;
   }
   response.result = false;
-  ROS_INFO("Current gimbal %d, angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", static_cast<int>(request.payload_index),
-           ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
-           ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
-           ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).yaw);
-  ROS_INFO_STREAM("Call gimbal Ctrl.");
+  // ROS_INFO("Current gimbal %d, angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", static_cast<int>(request.payload_index),
+  //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
+  //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
+  //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).yaw);
+  // ROS_INFO_STREAM("Call gimbal Ctrl.");
 
   if (request.is_reset)
   {
@@ -1201,18 +1201,18 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
   {
     GimbalRotationData gimbalRotationData;
     gimbalRotationData.rotationMode = request.rotationMode;
-    gimbalRotationData.pitch = request.pitch;
+    gimbalRotationData.pitch = -request.pitch;
     gimbalRotationData.roll  = request.roll;
-    gimbalRotationData.yaw   = request.yaw;
+    gimbalRotationData.yaw   = -request.yaw + Yaw_NED_world_offset_*180.0/M_PI;
     gimbalRotationData.time  = request.time;
     response.result = ptr_wrapper_->rotateGimbal(static_cast<PayloadIndex>(request.payload_index), gimbalRotationData);
   }
 
   sleep(2);
-  ROS_INFO("Current gimbal %d , angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", request.payload_index,
-           ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
-           ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
-           ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).yaw);
+  // ROS_INFO("Current gimbal %d , angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", request.payload_index,
+  //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
+  //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
+  //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).yaw);
   return true;
 }
 
