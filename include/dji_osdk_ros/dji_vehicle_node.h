@@ -61,7 +61,6 @@
 #include <nmea_msgs/Sentence.h>
 
 
-#include <dji_osdk_ros/SetLocalPoseMsg.h>
 /*! services */
 //flight control services
 #include <dji_osdk_ros/GetDroneType.h>

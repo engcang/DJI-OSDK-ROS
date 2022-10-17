@@ -18,6 +18,7 @@ FOREACH(EXAMPLE ${EXAMPLES})
 
   TARGET_LINK_LIBRARIES(${MY_TARGET}
                         ${PROJECT_NAME}
+                        ${EIGEN3_LIBS}
                         )
 
   INSTALL(TARGETS ${MY_TARGET}
