@@ -1,3 +1,13 @@
+
+
+/*
+  EXAMPLE CODE from Eungchang Mason Lee (eungchang_mason@kaist.ac.kr)
+* Code: GPS health → local frame set → manual arming → authority + take off → position control
+* Mode change in remote controller: ctrl authrotiy take over
+* Left back Gimbal channel in remote controller: ctrl authority hand over back to code
+*/
+
+
 ///// common headers
 #include <math.h>
 #include <cmath>
@@ -19,6 +29,7 @@
 #include <dji_osdk_ros/FlightTaskControl.h>
 #include <dji_osdk_ros/ObtainControlAuthority.h>
 #include <dji_osdk_ros/SetLocalPosRef.h>
+#include <dji_osdk_ros/GimbalAction.h>
 
 ///// Ctrl+C
 #include <signal.h>
@@ -42,13 +53,14 @@ class dji_controller_class{
     bool m_ctrl_init=false;
     uint8_t m_flight_status=0;
     int square_idx=0;
+    ros::Time m_ctrl_time_t;
 
     ///// ros and tf
     ros::NodeHandle nh;
     ros::Subscriber m_pose_sub, m_gps_status_sub, m_flight_status_sub, m_rc_sub;
     ros::Publisher m_position_controller_pub;
-    ros::ServiceClient m_local_ref_set_client, m_control_authority_client, m_flight_task_client;
-    ros::Timer m_control_timer;
+    ros::ServiceClient m_local_ref_set_client, m_control_authority_client, m_flight_task_client, m_gimbal_client;
+    ros::Timer m_control_timer, m_gimbal_control_timer;
 
     ///// functions
     void pose_cb(const nav_msgs::Odometry::ConstPtr& msg);
@@ -56,9 +68,9 @@ class dji_controller_class{
     void flight_status_cb(const std_msgs::UInt8::ConstPtr& msg);
     void rc_sub(const sensor_msgs::Joy::ConstPtr& msg);
     void control_timer_func(const ros::TimerEvent& event);
+    void gimbal_control_timer_func(const ros::TimerEvent& event);
 
     dji_controller_class(const ros::NodeHandle& n_private) : nh(n_private){
-      ////////// ROS things
       ///// ROS      
       // publishers
       m_position_controller_pub = nh.advertise<geometry_msgs::PoseStamped>("/dji_osdk_ros/set_local_pose", 3);
@@ -71,10 +83,12 @@ class dji_controller_class{
       m_local_ref_set_client = nh.serviceClient<dji_osdk_ros::SetLocalPosRef>("/set_local_pos_reference");
       m_control_authority_client = nh.serviceClient<dji_osdk_ros::ObtainControlAuthority>("/obtain_release_control_authority");
       m_flight_task_client = nh.serviceClient<dji_osdk_ros::FlightTaskControl>("/flight_task_control");
+      m_gimbal_client = nh.serviceClient<dji_osdk_ros::GimbalAction>("/gimbal_task_control");
       // timer
       m_control_timer = nh.createTimer(ros::Duration(1/20.0), &dji_controller_class::control_timer_func, this);
+      m_gimbal_control_timer = nh.createTimer(ros::Duration(1/1.0), &dji_controller_class::gimbal_control_timer_func, this);
       
-      ROS_WARN("Main class heritated, starting node...");
+      ROS_WARN("Starting Code...");
     }
 };
 
@@ -108,12 +122,18 @@ void dji_controller_class::gps_status_cb(const std_msgs::UInt8::ConstPtr& msg)
   {
     if ( msg->data > 3u )
     {
+      ROS_WARN("GPS health OK: %lu", msg->data);
       dji_osdk_ros::SetLocalPosRef srv_;
       m_local_ref_set_client.call(srv_);
       if (srv_.response.result)
       {
+        ROS_WARN("Local ref set OK");
         m_gps_status_ok=true;
       }
+    }
+    else
+    {
+      ROS_WARN("GPS health is not good!");
     }
   }
 }
@@ -122,21 +142,47 @@ void dji_controller_class::flight_status_cb(const std_msgs::UInt8::ConstPtr& msg
   m_flight_status = msg->data;
   if (m_gps_status_ok && m_pose_check)
   {
-    // if (m_flight_status == 1u && !m_ctrl_init)
-    if (!m_ctrl_init)
+    if (m_flight_status == 0u && !m_ctrl_init)
     {
+      ROS_INFO("Waiting for arming...");
+      ros::Duration(0.2).sleep();
+    }
+    else if (m_flight_status == 1u && !m_ctrl_init)
+    {
+      ROS_WARN("Armed, trying to obtain ctrl authority");
       dji_osdk_ros::ObtainControlAuthority srv_;
       srv_.request.enable_obtain=true;
       m_control_authority_client.call(srv_);
       if (srv_.response.result)
       {
+        ROS_WARN("Obtained authority, disarming then taking off");
         dji_osdk_ros::FlightTaskControl srv2_;
-        srv2_.request.task=4;
+        srv2_.request.task=8;
         m_flight_task_client.call(srv2_);
         if (srv2_.response.result)
         {
-          m_ctrl_init=true;
+          ros::Duration(1.0).sleep();
+          dji_osdk_ros::FlightTaskControl srv3_;
+          srv3_.request.task=4;
+          m_flight_task_client.call(srv3_);
+          if (srv3_.response.result)
+          {
+            ROS_WARN("Took off, offboard start");
+            m_ctrl_time_t = ros::Time::now();
+            m_ctrl_init=true;
+          }
         }
+      }
+    }
+    else if (m_flight_status == 2u && m_ctrl_init)
+    {
+      if ( (ros::Time::now()-m_ctrl_time_t) > ros::Duration(60.0) )
+      {
+        ROS_WARN("Time out, homing and landing!");
+        m_ctrl_time_t = ros::Time::now();
+        dji_osdk_ros::FlightTaskControl srv_;
+        srv_.request.task=3;
+        m_flight_task_client.call(srv_);
       }
     }
   }
@@ -156,6 +202,22 @@ void dji_controller_class::rc_sub(const sensor_msgs::Joy::ConstPtr& msg)
 
 
 //////////////////////// timers
+void dji_controller_class::gimbal_control_timer_func(const ros::TimerEvent& event)
+{
+  if (m_flight_status == 2u && m_ctrl_init)
+  {
+    dji_osdk_ros::GimbalAction srv_;
+    srv_.request.header.stamp = ros::Time::now();
+    srv_.request.is_reset = false;
+    srv_.request.payload_index = 0u;
+    srv_.request.rotationMode = 0u;
+    srv_.request.pitch = 0.0f;
+    srv_.request.roll = 0.0f;
+    srv_.request.yaw = 0.0f;
+    srv_.request.time = 1.0f;
+    m_gimbal_client.call(srv_);
+  }
+}
 void dji_controller_class::control_timer_func(const ros::TimerEvent& event)
 {
   if (m_gps_status_ok && m_pose_check && m_ctrl_init && m_flight_status==2u)

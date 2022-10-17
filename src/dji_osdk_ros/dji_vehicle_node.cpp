@@ -1208,7 +1208,7 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
     response.result = ptr_wrapper_->rotateGimbal(static_cast<PayloadIndex>(request.payload_index), gimbalRotationData);
   }
 
-  sleep(2);
+  sleep(1);
   // ROS_INFO("Current gimbal %d , angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", request.payload_index,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
@@ -1807,6 +1807,9 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "vehicle_node");
   VehicleNode vh_node;
 
-  ros::spin();
+  ros::AsyncSpinner spinner(6); // Use 6 threads
+  spinner.start();
+  ros::waitForShutdown();
+
   return 0;
 }
