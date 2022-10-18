@@ -330,6 +330,7 @@ bool VehicleNode::initTopic()
   velocity_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_vel", 3, &VehicleNode::localVelocityCtrlCallback, this);
   pqrt_control_sub_ = nh_.subscribe("dji_osdk_ros/set_body_rates", 3, &VehicleNode::bodyAngularRateCtrlCallback, this);
 
+  heading_from_TN_publisher_ = nh_.advertise<geometry_msgs::QuaternionStamped>("dji_osdk_ros/heading_from_TN", 10);
 /* @brief Provides various data about the battery
  * @note Most of these details need a DJI Intelligent battery to work correctly
  * (this is usually not the case with A3/N3 based setups)

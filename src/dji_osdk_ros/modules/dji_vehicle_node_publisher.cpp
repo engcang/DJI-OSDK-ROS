@@ -161,6 +161,14 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
   R_FRD2NED.getRPY(_not_used_r_, _not_used_p_, p->Yaw_NED_world_offset_);
 
+  geometry_msgs::QuaternionStamped quat_TN;
+  quat_TN.header.stamp = ros::Time::now();
+  quat_TN.quaternion.x = quat.q1;
+  quat_TN.quaternion.y = quat.q2;
+  quat_TN.quaternion.z = quat.q3;
+  quat_TN.quaternion.w = quat.q0;
+  p->heading_from_TN_publisher_.publish(quat_TN);
+
   if(p->local_pos_ref_set_)
   {
     nav_msgs::Odometry local_odom;
@@ -192,9 +200,13 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
     local_odom.twist.twist.angular.y = -w_FC.y;
     local_odom.twist.twist.angular.z = -w_FC.z;
 
-    p->gpsConvertENU(local_odom.pose.pose.position.y, local_odom.pose.pose.position.x, gps_pos.longitude,
+    double _x_, _y_;
+    p->gpsConvertENU(_x_, _y_, gps_pos.longitude,
                   gps_pos.latitude, p->local_pos_ref_longitude_, p->local_pos_ref_latitude_);
-    local_odom.pose.pose.position.y = -local_odom.pose.pose.position.y;
+    tf::Vector3 xyz0_before_tf(_x_, _y_, 0);
+    tf::Vector3 xyz0_after_tf(p->R_yaw_offset_.inverse() * p->R_ENU2ROS_ * xyz0_before_tf);
+    local_odom.pose.pose.position.x = xyz0_after_tf.x();
+    local_odom.pose.pose.position.y = xyz0_after_tf.y();
     local_odom.pose.pose.position.z = gps_pos.altitude - p->local_pos_ref_altitude_;
 
     p->local_x_offset_ = local_odom.pose.pose.position.x;

@@ -304,6 +304,7 @@ namespace dji_osdk_ros
 
       /*! publishers */
       //! telemetry data publisher
+      ros::Publisher heading_from_TN_publisher_;
       ros::Publisher angularRate_publisher_;
       ros::Publisher acceleration_publisher_;
       ros::Publisher battery_state_publisher_;

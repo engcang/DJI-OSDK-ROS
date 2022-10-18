@@ -230,20 +230,20 @@ void dji_controller_class::control_timer_func(const ros::TimerEvent& event)
     if (square_idx%4==0)
     {
       des_yaw = 0.0;
-      pose_in.pose.position.x = 2.0;
+      pose_in.pose.position.x = 0.0;
       pose_in.pose.position.y = 0.0;
     }
     else if (square_idx%4==1)
     {
       des_yaw = 1.5708;
-      pose_in.pose.position.x = 2.0;
-      pose_in.pose.position.y = 2.0;
+      pose_in.pose.position.x = 0.0;
+      pose_in.pose.position.y = 0.0;
     }
     else if (square_idx%4==2)
     {
       des_yaw = 3.1415;
       pose_in.pose.position.x = 0.0;
-      pose_in.pose.position.y = 2.0;
+      pose_in.pose.position.y = 0.0;
     }
     else if (square_idx%4==3)
     {
