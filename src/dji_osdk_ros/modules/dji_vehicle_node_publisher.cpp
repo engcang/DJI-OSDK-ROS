@@ -156,10 +156,11 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   Telemetry::TypeMap<Telemetry::TOPIC_QUATERNION>::type quat = vehicle->subscribe->getValue<Telemetry::TOPIC_QUATERNION>();
   Telemetry::TypeMap<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>::type w_FC = vehicle->subscribe->getValue<Telemetry::TOPIC_ANGULAR_RATE_FUSIONED>();
   // used for gimbal angles and orientation
-  double _not_used_r_, _not_used_p_;
+  double _not_used_r_, _not_used_p_, _not_used_y_;
   tf::Matrix3x3 R_FRD2NED(tf::Quaternion(quat.q1, quat.q2, quat.q3, quat.q0));
   tf::Matrix3x3 R_FLU2ENU = p->R_ENU2NED_.transpose() * R_FRD2NED * p->R_FLU2FRD_;
-  R_FRD2NED.getRPY(_not_used_r_, _not_used_p_, p->Yaw_NED_world_offset_);
+  R_FRD2NED.getRPY(_not_used_r_, _not_used_p_, _not_used_y_);
+  p->Yaw_TN_offset_deg = -_not_used_y_ * 180/M_PI;
 
   geometry_msgs::QuaternionStamped quat_TN;
   quat_TN.header.stamp = ros::Time::now();
@@ -242,9 +243,21 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   geometry_msgs::Vector3Stamped gimbal_angle_vec3;
 
   gimbal_angle_vec3.header.stamp = ros::Time::now();
-  gimbal_angle_vec3.vector.x     = gimbal_angle.y;
-  gimbal_angle_vec3.vector.y     = -gimbal_angle.x;
-  gimbal_angle_vec3.vector.z     = -(gimbal_angle.z - p->Yaw_NED_world_offset_*180.0/M_PI);
+  // gimbal_angle_vec3.vector.x     = gimbal_angle.y;
+  // gimbal_angle_vec3.vector.y     = -gimbal_angle.x;
+  // gimbal_angle_vec3.vector.z     = -(gimbal_angle.z - p->Yaw_NED_world_offset_*180.0/M_PI);
+  tf::Vector3 gim_before_tf(gimbal_angle.x, gimbal_angle.y, gimbal_angle.z);
+  tf::Vector3 gim_after_tf(p->R_GIM2ROS_ * gim_before_tf);
+  gimbal_angle_vec3.vector.x     = gim_after_tf.x();
+  gimbal_angle_vec3.vector.y     = gim_after_tf.y();
+
+  if (p->Yaw_TN_offset_deg * gim_after_tf.z() < 0)  {
+    gimbal_angle_vec3.vector.z   = -(360.0 - abs(p->Yaw_TN_offset_deg - gim_after_tf.z()));  
+  }
+  else {
+    gimbal_angle_vec3.vector.z     = -(p->Yaw_TN_offset_deg - gim_after_tf.z());
+  }
+  std::cout << p->Yaw_TN_offset_deg << ", " << gim_after_tf.z() << std::endl;
   p->gimbal_angle_publisher_.publish(gimbal_angle_vec3);
 
   // See dji_sdk.h for details about display_mode

@@ -48,6 +48,7 @@ VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_SUBSCRIBE),
                            R_FLU2FRD_(tf::Matrix3x3(1,  0,  0, 0, -1,  0, 0,  0, -1)),
                            R_ENU2NED_(tf::Matrix3x3(0,  1,  0, 1,  0,  0, 0,  0, -1)),
                            R_ENU2ROS_(tf::Matrix3x3(0,  1,  0, -1, 0,  0, 0,  0,  1)),
+                           R_GIM2ROS_(tf::Matrix3x3(0,  1,  0, -1, 0,  0, 0,  0,  -1)),
                            curr_align_state_(AlignStatus::UNALIGNED)
 {
   nh_.param("/vehicle_node/app_id",                  app_id_, 12345);
@@ -1202,9 +1203,16 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
   {
     GimbalRotationData gimbalRotationData;
     gimbalRotationData.rotationMode = request.rotationMode;
-    gimbalRotationData.pitch = -request.pitch;
-    gimbalRotationData.roll  = request.roll;
-    gimbalRotationData.yaw   = -request.yaw + Yaw_NED_world_offset_*180.0/M_PI;
+    // gimbalRotationData.pitch = -request.pitch;
+    // gimbalRotationData.roll  = request.roll;
+    // gimbalRotationData.yaw   = -request.yaw + Yaw_NED_world_offset_*180.0/M_PI;
+
+    tf::Vector3 req_ROS(request.roll, request.pitch, request.yaw + Yaw_TN_offset_deg);
+    tf::Vector3 req_GIM(R_GIM2ROS_.inverse() * req_ROS);
+
+    gimbalRotationData.pitch = req_GIM.x();
+    gimbalRotationData.roll  = req_GIM.y();
+    gimbalRotationData.yaw   = req_GIM.z();
     gimbalRotationData.time  = request.time;
     response.result = ptr_wrapper_->rotateGimbal(static_cast<PayloadIndex>(request.payload_index), gimbalRotationData);
   }
