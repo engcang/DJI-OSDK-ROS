@@ -269,7 +269,13 @@ void dji_controller_class::control_timer_func(const ros::TimerEvent& event)
     {
       std_msgs::Empty empty_;
       m_cam_capture_pub.publish(empty_);
-      square_idx++;
+      if (m_cam_capture_tmp_time_counter == 0.0)
+        m_cam_capture_tmp_time_counter = ros::Time::now().toSec();
+      else if (ros::Time::now().toSec() - m_cam_capture_tmp_time_counter > 0.5)
+      {
+        square_idx++;
+        m_cam_capture_tmp_time_counter = 0.0;
+      }
     }
   }
 }
