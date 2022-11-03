@@ -173,7 +173,7 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   if(p->local_pos_ref_set_)
   {
     nav_msgs::Odometry local_odom;
-    local_odom.header.frame_id = "/local";
+    local_odom.header.frame_id = "map";
     local_odom.header.stamp = gps_pos.header.stamp;
 
     if (p->local_yaw_offset_== -999.9)
