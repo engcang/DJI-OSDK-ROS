@@ -228,6 +228,7 @@ namespace dji_osdk_ros
       ros::ServiceServer set_home_point_server_;
       ros::ServiceServer set_current_aircraft_point_as_home_server_;
       ros::ServiceServer set_local_pos_reference_server_;
+      ros::ServiceServer set_local_pos_xy_reference_server_;
       ros::ServiceServer set_horizon_avoid_enable_server_;
       ros::ServiceServer get_avoid_enable_status_server_;
       ros::ServiceServer set_upwards_avoid_enable_server_;
@@ -374,6 +375,8 @@ namespace dji_osdk_ros
       bool setHomePointCallback(SetHomePoint::Request& request, SetHomePoint::Response& response);
       bool setLocalPosRefCallback(dji_osdk_ros::SetLocalPosRef::Request &request,
                                   dji_osdk_ros::SetLocalPosRef::Response &response);
+      bool setLocalPosXYRefCallback(dji_osdk_ros::SetLocalPosRef::Request &request,
+                                  dji_osdk_ros::SetLocalPosRef::Response &response);
       bool setHorizonAvoidCallback(SetAvoidEnable::Request& request, SetAvoidEnable::Response& response);
       bool setUpwardsAvoidCallback(SetAvoidEnable::Request& request, SetAvoidEnable::Response& response);
       bool getAvoidEnableStatusCallback(GetAvoidEnable::Request& request, GetAvoidEnable::Response& response);
@@ -517,7 +520,7 @@ namespace dji_osdk_ros
       double      local_pos_ref_latitude_, local_pos_ref_longitude_, local_pos_ref_altitude_, local_yaw_offset_=-999.9;
       double      local_x_offset_, local_y_offset_, local_z_offset_, local_curr_yaw_, Yaw_TN_offset_deg;
       double      current_gps_latitude_, current_gps_longitude_, current_gps_altitude_;
-      bool        local_pos_ref_set_;
+      bool        local_pos_ref_set_=false;
       int         current_gps_health_;
       const       tf::Matrix3x3 R_FLU2FRD_;
       const       tf::Matrix3x3 R_ENU2NED_;

@@ -202,6 +202,7 @@ void VehicleNode::initService()
                                                &VehicleNode::setCurrentAircraftLocAsHomeCallback,this);
   set_home_point_server_ = nh_.advertiseService("set_home_point", &VehicleNode::setHomePointCallback, this);
   set_local_pos_reference_server_ = nh_.advertiseService("set_local_pos_reference", &VehicleNode::setLocalPosRefCallback,this);
+  set_local_pos_xy_reference_server_ = nh_.advertiseService("set_local_pos_xy_reference", &VehicleNode::setLocalPosXYRefCallback,this);
   set_horizon_avoid_enable_server_ = nh_.advertiseService("set_horizon_avoid_enable", &VehicleNode::setHorizonAvoidCallback,this);
   set_upwards_avoid_enable_server_ = nh_.advertiseService("set_upwards_avoid_enable", &VehicleNode::setUpwardsAvoidCallback, this);
   get_avoid_enable_status_server_ = nh_.advertiseService("get_avoid_enable_status", &VehicleNode::getAvoidEnableStatusCallback, this);
@@ -1207,7 +1208,9 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
     // gimbalRotationData.roll  = request.roll;
     // gimbalRotationData.yaw   = -request.yaw + Yaw_NED_world_offset_*180.0/M_PI;
 
-    tf::Vector3 req_ROS(request.roll, request.pitch, request.yaw + Yaw_TN_offset_deg);
+    ////// with rotation mode 1, no offset is needed!!
+    // tf::Vector3 req_ROS(request.roll, request.pitch, request.yaw + Yaw_TN_offset_deg);
+    tf::Vector3 req_ROS(request.roll, request.pitch, request.yaw);
     tf::Vector3 req_GIM(R_GIM2ROS_.inverse() * req_ROS);
 
     gimbalRotationData.pitch = req_GIM.x();
@@ -1217,12 +1220,12 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
     response.result = ptr_wrapper_->rotateGimbal(static_cast<PayloadIndex>(request.payload_index), gimbalRotationData);
   }
 
-  sleep(0.1);
+  sleep(0.2);
   // ROS_INFO("Current gimbal %d , angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", request.payload_index,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).yaw);
-  return true;
+  return response.result;
 }
 
 bool VehicleNode::cameraSetEVCallback(CameraEV::Request& request, CameraEV::Response& response)
@@ -1661,6 +1664,36 @@ bool VehicleNode::setHomePointCallback(SetHomePoint::Request& request, SetHomePo
   return false;
 }
 
+bool VehicleNode::setLocalPosXYRefCallback(dji_osdk_ros::SetLocalPosRef::Request &request,
+                                         dji_osdk_ros::SetLocalPosRef::Response &response)
+{
+  ROS_INFO("Currrent GPS health is %d",current_gps_health_ );
+  if (current_gps_health_ > 3)
+  {
+    local_pos_ref_latitude_ = current_gps_latitude_;
+    local_pos_ref_longitude_ = current_gps_longitude_;
+    ROS_INFO("Local Position XY reference has been set.");
+    ROS_INFO("MONITOR GPS HEALTH WHEN USING THIS TOPIC");
+    local_pos_ref_set_ = true;
+
+    // Create message to publish to a topic
+    sensor_msgs::NavSatFix localFrameLLA;
+    localFrameLLA.latitude = local_pos_ref_latitude_;
+    localFrameLLA.longitude = local_pos_ref_longitude_;
+    localFrameLLA.altitude = local_pos_ref_altitude_;
+    local_frame_ref_publisher_.publish(localFrameLLA);
+
+    response.result = true;
+  }
+  else
+  {
+    ROS_INFO("Not enough GPS Satellites. ");
+    ROS_INFO("Cannot set Local Position reference");
+    local_pos_ref_set_ = false;
+    response.result = false;
+  }
+  return true;
+}
 bool VehicleNode::setLocalPosRefCallback(dji_osdk_ros::SetLocalPosRef::Request &request,
                                          dji_osdk_ros::SetLocalPosRef::Response &response)
 {

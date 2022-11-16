@@ -257,7 +257,7 @@ void VehicleNode::publish50HzData(Vehicle* vehicle, RecvContainer recvFrame,
   else {
     gimbal_angle_vec3.vector.z     = -(p->Yaw_TN_offset_deg - gim_after_tf.z());
   }
-  std::cout << p->Yaw_TN_offset_deg << ", " << gim_after_tf.z() << std::endl;
+  // std::cout << p->Yaw_TN_offset_deg << ", " << gim_after_tf.z() << std::endl;
   p->gimbal_angle_publisher_.publish(gimbal_angle_vec3);
 
   // See dji_sdk.h for details about display_mode
