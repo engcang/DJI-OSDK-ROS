@@ -1220,7 +1220,7 @@ bool VehicleNode::gimbalCtrlCallback(GimbalAction::Request& request, GimbalActio
     response.result = ptr_wrapper_->rotateGimbal(static_cast<PayloadIndex>(request.payload_index), gimbalRotationData);
   }
 
-  sleep(0.2);
+  sleep(0.15);
   // ROS_INFO("Current gimbal %d , angle (p,r,y) = (%0.2f, %0.2f, %0.2f)", request.payload_index,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).pitch,
   //          ptr_wrapper_->getGimbalData(static_cast<PayloadIndex>(request.payload_index)).roll,
