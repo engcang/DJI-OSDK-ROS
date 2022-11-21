@@ -514,6 +514,7 @@ namespace dji_osdk_ros
       bool          align_time_with_FC_;
       double        xy_pos_threshold_, xy_vel_threshold_, xy_body_rates_threshold_;
       double        z_pos_threshold_, z_vel_threshold_, z_body_rates_threshold_;
+      double        xy_pos_gain_, z_pos_gain_;
 
       AlignStatus curr_align_state_;
       ros::Time   base_time_;

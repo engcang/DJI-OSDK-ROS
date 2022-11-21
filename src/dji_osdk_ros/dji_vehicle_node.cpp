@@ -61,9 +61,11 @@ VehicleNode::VehicleNode():telemetry_from_fc_(TelemetryType::USE_ROS_SUBSCRIBE),
   nh_.param("/vehicle_node/gravity_const",           gravity_const_, 9.81);
   nh_.param("/vehicle_node/align_time",              align_time_with_FC_, false);
   nh_.param("/vehicle_node/xy_pos_threshold",        xy_pos_threshold_, 3.0);
+  nh_.param("/vehicle_node/xy_pos_gain",             xy_pos_gain_, 2.0);
   nh_.param("/vehicle_node/xy_vel_threshold",        xy_vel_threshold_, 2.0);
   nh_.param("/vehicle_node/xy_body_rates_threshold", xy_body_rates_threshold_, 2.0);
   nh_.param("/vehicle_node/z_pos_threshold",         z_pos_threshold_, 2.0);
+  nh_.param("/vehicle_node/z_pos_gain",              z_pos_gain_, 2.0);
   nh_.param("/vehicle_node/z_vel_threshold",         z_vel_threshold_, 2.0);
   nh_.param("/vehicle_node/z_body_rates_threshold",  z_body_rates_threshold_, 2.0);
 
@@ -948,9 +950,9 @@ bool VehicleNode::getDroneTypeCallback(dji_osdk_ros::GetDroneType::Request &requ
 void VehicleNode::bodyAngularRateCtrlCallback(const geometry_msgs::TwistStamped::ConstPtr& msg) {
   /// ROS coordinates  
   tf::Vector3 limited_input(
-              val_sat(msg->twist.angular.x, xy_body_rates_threshold_)*180.0/M_PI,
-              val_sat(msg->twist.angular.y, xy_body_rates_threshold_)*180.0/M_PI,
-              val_sat(msg->twist.angular.z, z_body_rates_threshold_)*180.0/M_PI);
+                val_sat(msg->twist.angular.x, xy_body_rates_threshold_)*180.0/M_PI,
+                val_sat(msg->twist.angular.y, xy_body_rates_threshold_)*180.0/M_PI,
+                val_sat(msg->twist.angular.z, z_body_rates_threshold_)*180.0/M_PI);
   /// DJI coordinates
   ptr_wrapper_->inputBodyRateThrust(limited_input.x(), -limited_input.y(), -limited_input.z(), msg->twist.linear.z*100.0);
   return;
@@ -960,9 +962,9 @@ void VehicleNode::localVelocityCtrlCallback(const geometry_msgs::TwistStamped::C
   tf::Matrix3x3 R_curr_yaw_;
   R_curr_yaw_.setRPY(0.0, 0.0, local_curr_yaw_);
   tf::Vector3 limited_input (
-              val_sat(msg->twist.linear.x, xy_vel_threshold_),
-              val_sat(msg->twist.linear.y, xy_vel_threshold_),
-              val_sat(msg->twist.linear.z, z_vel_threshold_));
+                val_sat(msg->twist.linear.x, xy_vel_threshold_),
+                val_sat(msg->twist.linear.y, xy_vel_threshold_),
+                val_sat(msg->twist.linear.z, z_vel_threshold_));
   tf::Vector3 limited_input_tf (R_curr_yaw_.inverse() * limited_input);
 
   /// DJI coordinates
@@ -978,9 +980,9 @@ void VehicleNode::localPositionCtrlCallback(const geometry_msgs::PoseStamped::Co
   tf::Matrix3x3 R_curr_yaw_;
   R_curr_yaw_.setRPY(0.0, 0.0, local_curr_yaw_);
   tf::Vector3 limited_input (
-              val_sat(msg->pose.position.x-local_x_offset_, xy_pos_threshold_),
-              val_sat(msg->pose.position.y-local_y_offset_, xy_pos_threshold_),
-              val_sat(msg->pose.position.z-local_z_offset_, z_pos_threshold_)+local_z_offset_);
+                val_sat((msg->pose.position.x-local_x_offset_)*xy_pos_gain_, xy_pos_threshold_),
+                val_sat((msg->pose.position.y-local_y_offset_)*xy_pos_gain_, xy_pos_threshold_),
+                val_sat((msg->pose.position.z-local_z_offset_)*z_pos_gain_, z_pos_threshold_)+local_z_offset_);
   tf::Vector3 limited_input_tf (R_curr_yaw_.inverse() * limited_input);
 
   /// DJI coordinates
