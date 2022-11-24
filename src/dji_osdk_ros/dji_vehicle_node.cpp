@@ -329,7 +329,7 @@ void VehicleNode::initService()
 }
 
 bool VehicleNode::initTopic()
-{
+{ 
   position_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_pose", 3, &VehicleNode::localPositionCtrlCallback, this);
   velocity_control_sub_ = nh_.subscribe("dji_osdk_ros/set_local_vel", 3, &VehicleNode::localVelocityCtrlCallback, this);
   pqrt_control_sub_ = nh_.subscribe("dji_osdk_ros/set_body_rates", 3, &VehicleNode::bodyAngularRateCtrlCallback, this);
@@ -987,6 +987,7 @@ void VehicleNode::localPositionCtrlCallback(const geometry_msgs::PoseStamped::Co
 
   /// DJI coordinates
   ptr_wrapper_->inputLocalPose(limited_input_tf.x(), -limited_input_tf.y(), limited_input_tf.z(), -_yaw_input*180.0/M_PI);
+  // ptr_wrapper_->inputLocalVel(limited_input_tf.x(), -limited_input_tf.y(), limited_input_tf.z(), -_yaw_input*180.0/M_PI);
   return;
 }
 

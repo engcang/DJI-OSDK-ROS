@@ -1629,7 +1629,9 @@ static T_OsdkOsalHandler osalHandler = {
     FlightController::JoystickCommand joystickCommand = {x, y, z, yaw};
     vehicle->flightController->setJoystickCommand(joystickCommand);
     vehicle->flightController->joystickAction();
+    return true;
   }
+  
   bool VehicleWrapper::inputLocalVel(const double &vx, const double &vy, const double &vz, const double &yaw_rate)
   {
     if (!vehicle) {
@@ -1649,7 +1651,9 @@ static T_OsdkOsalHandler osalHandler = {
     FlightController::JoystickCommand joystickCommand = {vx, vy, vz, yaw_rate};
     vehicle->flightController->setJoystickCommand(joystickCommand);
     vehicle->flightController->joystickAction();
+    return true;
   }
+
   bool VehicleWrapper::inputBodyRateThrust(const double &p, const double &q, const double &r, const double &thrust)
   {
     if (!vehicle) {
@@ -1669,6 +1673,7 @@ static T_OsdkOsalHandler osalHandler = {
     FlightController::JoystickCommand joystickCommand = {p, q, thrust, r};
     vehicle->flightController->setJoystickCommand(joystickCommand);
     vehicle->flightController->joystickAction();
+    return true;
   }
 
   bool VehicleWrapper::moveByPositionOffset(const JoystickCommand &JoystickCommand,int timeout,
